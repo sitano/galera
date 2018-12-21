@@ -39,11 +39,15 @@ namespace gcache
             assert(bh->size > 0);
             assert(bh->store == BUFFER_IN_PAGE);
             assert(bh->ctx == reinterpret_cast<BH_ctx_t>(this));
+            assert(BH_is_released(bh));
             assert (used_ > 0);
-            used_--;
 #ifndef NDEBUG
             if (debug_) { log_info << name() << " freed " << bh; }
 #endif
+            if (bh->seqno_g <= 0) // ordered buffers get dicarded in discard()
+            {
+                used_--;
+            }
         }
 
         void  repossess(BufferHeader* bh)
@@ -55,17 +59,20 @@ namespace gcache
             assert(bh->store == BUFFER_IN_PAGE);
             assert(bh->ctx == reinterpret_cast<BH_ctx_t>(this));
             assert(BH_is_released(bh)); // will be marked unreleased by caller
-            used_++;
 #ifndef NDEBUG
             if (debug_) { log_info << name() << " repossessed " << bh; }
 #endif
+            used_++;
         }
 
         void discard (BufferHeader* bh)
         {
+            assert(BH_is_released(bh));
 #ifndef NDEBUG
             if (debug_) { log_info << name() << " discarded " << bh; }
 #endif
+            assert(used_ > 0);
+            used_--;
         }
 
         size_t used () const { return used_; }
@@ -89,7 +96,7 @@ namespace gcache
 
         gu::FileDescriptor fd_;
         gu::MMap           mmap_;
-        void* const        ps_;
+        void*              ps_;
         uint8_t*           next_;
         size_t             space_;
         size_t             used_;

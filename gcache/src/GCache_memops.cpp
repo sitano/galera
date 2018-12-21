@@ -11,7 +11,9 @@ namespace gcache
     void
     GCache::discard_buffer (BufferHeader* bh)
     {
+        assert(bh->seqno_g > 0);
         bh->seqno_g = SEQNO_ILL; // will never be reused
+
         switch (bh->store)
         {
         case BUFFER_IN_MEM:  mem.discard (bh); break;
@@ -23,45 +25,33 @@ namespace gcache
         }
     }
 
-    bool
-    GCache::discard_seqno (int64_t seqno)
+    template <typename T> bool
+    GCache::discard (T& cond)
     {
         assert(mtx.locked() && mtx.owned());
 
 #ifndef NDEBUG
-        seqno_t begin(0);
-        if (params.debug())
-        {
-            begin = (seqno2ptr.begin() != seqno2ptr.end() ?
-                     seqno2ptr.begin()->first : 0);
-            assert(begin > 0);
-            log_info << "GCache::discard_seqno(" << begin << " - "
-                     << seqno << ")";
-        }
+        if (params.debug()) cond.debug_begin();
 #endif
         for (seqno2ptr_t::iterator i = seqno2ptr.begin();
-             i != seqno2ptr.end() && i->first <= seqno;)
+             i != seqno2ptr.end() && cond.check();)
         {
             BufferHeader* bh(ptr2BH (i->second));
 
             if (gu_likely(BH_is_released(bh)))
             {
                 assert (bh->seqno_g == i->first);
-                assert (bh->seqno_g <= seqno);
 
+                cond.update(bh);
                 seqno2ptr.erase (i++); // post ++ is significant!
                 discard_buffer(bh);
             }
             else
             {
 #ifndef NDEBUG
-                if (params.debug())
-                {
-                    log_info << "GCache::discard_seqno(" << begin << " - "
-                             << seqno << "): "
-                             << bh->seqno_g << " not released, bailing out.";
-                }
+                if (params.debug()) cond.debug_fail();
 #endif
+                assert(cond.check());
                 return false;
             }
         }
@@ -69,8 +59,70 @@ namespace gcache
         return true;
     }
 
+    bool
+    GCache::discard_size(size_t const size)
+    {
+        class Cond
+        {
+            size_t const upto_;
+            size_t       done_;
+        public:
+            Cond(size_t s) : upto_(s), done_(0) {}
+            bool check() const { return done_ < upto_; }
+            void update(const BufferHeader* bh) { done_ += bh->size; }
+            void debug_begin()
+            {
+                log_info << "GCache::discard_size(" << upto_ << ")";
+            }
+            void debug_fail()
+            {
+                log_info << "GCache::discard_size() can't discard "
+                         << (upto_ - done_) << ", bailing out.";
+            }
+        }
+        cond(size);
+
+        return discard<>(cond);
+    }
+
+    bool
+    GCache::discard_seqno (seqno_t seqno)
+    {
+        class Cond
+        {
+            seqno_t const upto_;
+            seqno_t       done_;
+        public:
+            Cond(seqno_t start, seqno_t end) : upto_(end), done_(start - 1) {}
+            bool check() const { return done_ < upto_; }
+            void update(const BufferHeader* bh)
+            {
+                assert(done_ + 1 == bh->seqno_g);
+                done_ = bh->seqno_g;
+            }
+            void debug_begin()
+            {
+                log_info << "GCache::discard_seqno(" << done_ + 1 << " - "
+                         << upto_ << ")";
+            }
+            void debug_fail()
+            {
+                log_info << "GCache::discard_seqno(" << upto_ << "): "
+                             << done_ + 1 << " not released, bailing out.";
+            }
+        };
+
+        seqno_t const start(seqno2ptr.begin() != seqno2ptr.end() ?
+                            seqno2ptr.begin()->first : 0);
+        assert(start > 0);
+
+        Cond cond(start, seqno);
+
+        return discard<>(cond);
+    }
+
     void
-    GCache::discard_tail (int64_t seqno)
+    GCache::discard_tail (seqno_t seqno)
     {
         seqno2ptr_t::reverse_iterator r;
         while ((r = seqno2ptr.rbegin()) != seqno2ptr.rend() &&
@@ -100,6 +152,9 @@ namespace gcache
 
             gu::Lock lock(mtx);
 
+            bool const page_cleanup(ps.page_cleanup_needed());
+            if (page_cleanup) discard_size(2*size);
+
             mallocs++;
 
             ptr = mem.malloc(size);
@@ -124,8 +179,6 @@ namespace gcache
         assert(bh->seqno_g != SEQNO_ILL);
         BH_release(bh);
 
-        seqno_t new_released(seqno_released);
-
         if (gu_likely(SEQNO_NONE != bh->seqno_g))
         {
 #ifndef NDEBUG
@@ -138,7 +191,7 @@ namespace gcache
             assert(seqno_released < bh->seqno_g ||
                    SEQNO_NONE == seqno_released);
 #endif
-            new_released = bh->seqno_g;
+            seqno_released = bh->seqno_g;
         }
 #ifndef NDEBUG
         void* const ptr(bh + 1);
@@ -156,33 +209,18 @@ namespace gcache
         {
         case BUFFER_IN_MEM:  mem.free (bh); break;
         case BUFFER_IN_RB:   rb.free  (bh); break;
-        case BUFFER_IN_PAGE:
-            if (gu_likely(bh->seqno_g > 0))
-            {
-                if (gu_unlikely(!discard_seqno(bh->seqno_g)))
-                {
-                    new_released = (seqno2ptr.begin()->first - 1);
-                    assert(seqno_released <= new_released);
-                }
-            }
-            else
-            {
-                assert(bh->seqno_g != SEQNO_ILL);
-                bh->seqno_g = SEQNO_ILL;
-                ps.discard (bh);
-            }
-            break;
+        case BUFFER_IN_PAGE: ps.free  (bh); break;
         }
+
         rb.assert_size_free();
 
 #ifndef NDEBUG
         if (params.debug())
         {
             log_info << "GCache::free_common(): seqno_released: "
-                     << seqno_released << " -> " << new_released;
+                     << seqno_released;
         }
 #endif
-        seqno_released = new_released;
     }
 
     void

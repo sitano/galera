@@ -10,6 +10,7 @@
 #include "gcache_memops.hpp"
 #include "gcache_page.hpp"
 #include "gcache_seqno.hpp"
+//#include "gcache_page_deleter.hpp" remove
 
 #include <string>
 #include <deque>
@@ -37,16 +38,14 @@ namespace gcache
 
         void* realloc (void* ptr, size_type size);
 
-        void  free    (BufferHeader* bh) { assert(0); }
+        void  free    (BufferHeader* bh) { release<false>(bh); }
 
+        /* page::repossess() should be called directly on page object */
         void  repossess(BufferHeader* bh) { assert(0); }
 
-        void  discard (BufferHeader* bh)
-        {
-            assert(BH_is_released(bh));
-            assert(SEQNO_ILL == bh->seqno_g);
-            free_page_ptr(static_cast<Page*>(BH_ctx(bh)), bh);
-        }
+        void  discard (BufferHeader* bh) { release<true>(bh); }
+
+        bool  page_cleanup_needed() const { return total_size_ > keep_size_; }
 
         void  reset();
 
@@ -90,10 +89,15 @@ namespace gcache
 
         void* malloc_new (size_type size);
 
-        void
-        free_page_ptr (Page* page, BufferHeader* bh)
+        template <bool discard> void
+        release(BufferHeader* bh)
         {
-            page->free(bh);
+            assert(BH_is_released(bh));
+
+            Page* page(static_cast<Page*>(BH_ctx(bh)));
+
+            discard ? page->discard(bh) : page->free(bh);
+
             if (0 == page->used()) cleanup();
         }
 

@@ -298,8 +298,8 @@ namespace gcache
             {
             case BUFFER_IN_MEM:  mem.repossess(bh); break;
             case BUFFER_IN_RB:   rb.repossess (bh); break;
-            case BUFFER_IN_PAGE: assert(0); break; // for the moment buffers
-                                                   // do not linger in pages
+            case BUFFER_IN_PAGE:
+                reinterpret_cast<MemOps*>(bh->ctx)->repossess(bh); break;
             default: assert(0);
             }
 

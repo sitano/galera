@@ -5,6 +5,7 @@
 #ifndef __GCACHE_H__
 #define __GCACHE_H__
 
+#include "gcache_seqno.hpp"
 #include "gcache_mem_store.hpp"
 #include "gcache_rb_store.hpp"
 #include "gcache_page_store.hpp"
@@ -67,7 +68,7 @@ namespace gcache
          * Assign sequence number to buffer pointed to by ptr
          */
         void seqno_assign (const void* ptr,
-                           int64_t     seqno_g,
+                           seqno_t     seqno_g,
                            uint8_t     type,
                            bool        skip);
 
@@ -81,7 +82,7 @@ namespace gcache
         /*!
          * Release (free) buffers up to seqno
          */
-        void seqno_release (int64_t seqno);
+        void seqno_release (seqno_t seqno);
 
         /*!
          * Returns smallest seqno present in history
@@ -107,7 +108,7 @@ namespace gcache
          * The buffer will need to be "freed" again.
          * @throws NotFound
          */
-        const void* seqno_get_ptr (int64_t seqno_g, ssize_t& size);
+        const void* seqno_get_ptr (seqno_t seqno_g, ssize_t& size);
 
         class Buffer
         {
@@ -134,7 +135,7 @@ namespace gcache
                 return *this;
             }
 
-            int64_t           seqno_g() const { return seqno_g_; }
+            seqno_t           seqno_g() const { return seqno_g_; }
             const gu::byte_t* ptr()     const { return ptr_;     }
             ssize_type        size()    const { return size_;    }
             bool              skip()    const { return skip_;    }
@@ -147,7 +148,7 @@ namespace gcache
                 ptr_ = reinterpret_cast<const gu::byte_t*>(p);
             }
 
-            void set_other (int64_t g, ssize_type s, bool skp, uint8_t t)
+            void set_other (seqno_t g, ssize_type s, bool skp, uint8_t t)
             {
                 assert(s > 0);
                 seqno_g_ = g; size_ = s; skip_ = skp, type_ = t;
@@ -155,7 +156,7 @@ namespace gcache
 
         private:
 
-            int64_t           seqno_g_;
+            seqno_t           seqno_g_;
             const gu::byte_t* ptr_;
             ssize_type        size_;
             bool              skip_;
@@ -243,9 +244,9 @@ namespace gcache
         long long       reallocs;
         long long       frees;
 
-        int64_t         seqno_locked;
-        int64_t         seqno_max;
-        int64_t         seqno_released;
+        seqno_t         seqno_locked;
+        seqno_t         seqno_max;
+        seqno_t         seqno_released;
 
 #ifndef NDEBUG
         std::set<const void*> buf_tracker;
@@ -253,11 +254,18 @@ namespace gcache
 
         void discard_buffer (BufferHeader* bh);
 
+        /* discard buffers while condition.check() is true */
+        template <typename T>
+        bool discard (T& condition);
+
         /* returns true when successfully discards all seqnos up to s */
-        bool discard_seqno (int64_t s);
+        bool discard_seqno (seqno_t s);
+
+        /* returns true when successfully discards at least size of buffers */
+        bool discard_size (size_t size);
 
         /* discards all seqnos greater than s */
-        void discard_tail (int64_t s);
+        void discard_tail (seqno_t s);
 
         // disable copying
         GCache (const GCache&);

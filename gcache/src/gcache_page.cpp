@@ -46,7 +46,8 @@ gcache::Page::drop_fs_cache() const
 #endif
 }
 
-gcache::Page::Page (void* ps, const std::string& name, size_t size, int dbg)
+gcache::Page::Page (void* ps, const std::string& name, size_t size,
+                    int dbg)
     :
     fd_   (name, size, false, false),
     mmap_ (fd_),
@@ -58,7 +59,7 @@ gcache::Page::Page (void* ps, const std::string& name, size_t size, int dbg)
 {
     log_info << "Created page " << name << " of size " << space_
              << " bytes";
-    BH_clear (reinterpret_cast<BufferHeader*>(next_));
+    BH_clear (BH_cast(next_));
 }
 
 void*

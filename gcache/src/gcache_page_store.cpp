@@ -116,10 +116,7 @@ gcache::PageStore::delete_page ()
 void
 gcache::PageStore::cleanup ()
 {
-    while (total_size_   > keep_size_ &&
-           pages_.size() > keep_page_ &&
-           delete_page())
-    {}
+    while (page_cleanup_needed() && delete_page()) {}
 }
 
 void
@@ -256,6 +253,7 @@ gcache::PageStore::realloc (void* ptr, size_type const size)
     assert(ptr != NULL);
 
     BufferHeader* const bh(ptr2BH(ptr));
+    assert(SEQNO_NONE == bh->seqno_g);
     Page* const page(static_cast<Page*>(BH_ctx(bh)));
 
     void* ret(page->realloc(ptr, size));
@@ -270,7 +268,8 @@ gcache::PageStore::realloc (void* ptr, size_type const size)
         size_type const ptr_size(bh->size - sizeof(BufferHeader));
 
         memcpy (ret, ptr, size > ptr_size ? ptr_size : size);
-        free_page_ptr (page, bh);
+        BH_release(bh);
+        release<false>(bh);
     }
 
     return ret;

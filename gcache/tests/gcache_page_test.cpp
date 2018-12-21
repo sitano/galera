@@ -10,7 +10,7 @@
 
 using namespace gcache;
 
-void ps_free (void* ptr)
+static void ps_free (void* ptr)
 {
     BufferHeader* const bh(ptr2BH(ptr));
     BH_release (bh);
@@ -115,6 +115,107 @@ START_TEST(test3) // check that all page size is efficiently used
 }
 END_TEST
 
+START_TEST(test4) // check that pages linger correctly and get deleted as they
+{                 // should when keep_size is exceeded
+    const char* const dir_name = "";
+    ssize_t const page_size = 1024;
+    size_t const keep_pages = 3;
+    ssize_t const keep_size = keep_pages * page_size;
+    size_t expect;
+
+    gcache::PageStore ps(dir_name, keep_size, page_size, 0, false);
+
+    fail_if(ps.count() != 0);
+    fail_if(ps.total_pages() != 0);
+
+    void* ptr1(ps.malloc(page_size));
+    fail_if(NULL == ptr1);
+    expect = 1;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    void* ptr2(ps.malloc(page_size));
+    fail_if(NULL == ptr2);
+    expect = 2;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    void* ptr3(ps.malloc(page_size));
+    fail_if(NULL == ptr3);
+    expect = 3;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    void* ptr4(ps.malloc(page_size));
+    fail_if(NULL == ptr4);
+    expect = 4;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    ps_free(ptr1);
+    ps.free(ptr2BH(ptr1));
+    expect = keep_pages;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    ps_free(ptr2);
+    ps.free(ptr2BH(ptr2));
+    expect = 3;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    void* ptr5(ps.malloc(page_size));
+    fail_if(NULL == ptr5);
+    expect = 3;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    ps_free(ptr5);
+    ps.free(ptr2BH(ptr5));
+    expect = 3;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    ps_free(ptr4);
+    ps.discard(ptr2BH(ptr4));
+    expect = 3;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    void* ptr6(ps.malloc(page_size));
+    fail_if(NULL == ptr6);
+    expect = 4; // page 3 is still locked
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    ps_free(ptr6);
+    ps.free(ptr2BH(ptr6));
+    expect = 4; // page 3 is still locked
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    void* ptr7(ps.malloc(page_size));
+    fail_if(NULL == ptr7);
+    expect = 5;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    ps_free(ptr7);
+    ps.free(ptr2BH(ptr7));
+    expect = 5;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    ps_free(ptr3);
+    ps.free(ptr2BH(ptr3));
+    expect = keep_pages;
+    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
+            expect, ps.total_pages());
+
+    fail_if(ps.count() != 7);
+}
+END_TEST
+
 Suite* gcache_page_suite()
 {
     Suite* s = suite_create("gcache::PageStore");
@@ -124,6 +225,7 @@ Suite* gcache_page_suite()
     tcase_add_test(tc, test1);
     tcase_add_test(tc, test2);
     tcase_add_test(tc, test3);
+    tcase_add_test(tc, test4);
     suite_add_tcase(s, tc);
 
     return s;
