@@ -121,7 +121,7 @@ galera::ReplicatorSMM::ReplicatorSMM(const struct wsrep_init_args* args)
     sst_cond_           (),
     sst_retry_sec_      (1),
     sst_received_       (false),
-    gcache_             (config_, config_.get(BASE_DIR)),
+    gcache_             (config_, config_.get(BASE_DIR), args->encrypt_cb),
     gcs_                (config_, gcache_, proto_max_, args->proto_ver,
                          args->node_name, args->node_incoming),
     service_thd_        (gcs_, gcache_),

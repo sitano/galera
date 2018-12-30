@@ -51,6 +51,7 @@ namespace galera
 
         Replicator() { }
         virtual ~Replicator() { }
+        virtual wsrep_status_t enc_set_key(const wsrep_enc_key_t&) = 0;
         virtual wsrep_status_t connect(const std::string& cluster_name,
                                        const std::string& cluster_url,
                                        const std::string& state_donor,

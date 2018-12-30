@@ -148,7 +148,7 @@ namespace gcache
 
         if (gu_likely(s > 0))
         {
-            size_type const size(MemOps::align_size(s + sizeof(BufferHeader)));
+            size_type const size(MemOps::BH_aligned_size(s));
 
             gu::Lock lock(mtx);
 
@@ -157,11 +157,18 @@ namespace gcache
 
             mallocs++;
 
-            ptr = mem.malloc(size);
+            if (!encrypt_cache)
+            {
+                ptr = mem.malloc(size);
 
-            if (0 == ptr) ptr = rb.malloc(size);
+                if (0 == ptr) ptr = rb.malloc(size);
 
-            if (0 == ptr) ptr = ps.malloc(size);
+                if (0 == ptr) ptr = ps.malloc(size);
+            }
+            else /* only page store can be used */
+            {
+                ptr = ps.malloc(size);
+            }
 
 #ifndef NDEBUG
             if (0 != ptr) buf_tracker.insert (ptr);
@@ -259,7 +266,7 @@ namespace gcache
 
         assert((uintptr_t(ptr) % MemOps::ALIGNMENT) == 0);
 
-        size_type const size(MemOps::align_size(s + sizeof(BufferHeader)));
+        size_type const size(MemOps::BH_aligned_size(s));
 
         void*               new_ptr(NULL);
         BufferHeader* const bh(ptr2BH(ptr));

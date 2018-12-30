@@ -152,9 +152,28 @@ char* galera_parameters_get (wsrep_t* gh)
 }
 
 extern "C"
-wsrep_status_t galera_enc_set_key(wsrep_t* gh, const wsrep_enc_key_t*key)
+wsrep_status_t galera_enc_set_key(wsrep_t* gh, const wsrep_enc_key_t* key)
 {
-    return WSREP_NOT_IMPLEMENTED;
+    static wsrep_enc_key_t null_key = { NULL, 0 };
+
+    REPL_CLASS * repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    if (NULL == key) key = &null_key;
+
+    try
+    {
+        return repl->enc_set_key(*key);
+    }
+    catch(std::exception& e)
+    {
+        log_error << e.what();
+        return WSREP_NODE_FAIL;
+    }
+    catch(...)
+    {
+        log_fatal << "non-standard exception";
+        return WSREP_FATAL;
+    }
 }
 
 extern "C"

@@ -16,6 +16,8 @@
 #include <gu_config.hpp>
 #include <gu_gtid.hpp>
 
+#include <wsrep_api.h> // encryption declarations
+
 #include <string>
 #include <iostream>
 #ifndef NDEBUG
@@ -40,7 +42,9 @@ namespace gcache
          * Creates a new gcache file in "gcache.name" conf parameter or
          * in data_dir. If file already exists, it gets overwritten.
          */
-        GCache (gu::Config& cfg, const std::string& data_dir);
+        GCache (gu::Config&        cfg,
+                const std::string& data_dir,
+                wsrep_encrypt_cb_t encrypt_cb = NULL);
 
         virtual ~GCache();
 
@@ -49,6 +53,9 @@ namespace gcache
 
         /* Resets storage */
         void  reset();
+
+        /* Sets encryption key */
+        void set_enc_key(const wsrep_enc_key_t& key);
 
         /* Memory allocation functions */
         typedef MemOps::ssize_type ssize_type;
@@ -247,6 +254,8 @@ namespace gcache
         seqno_t         seqno_locked;
         seqno_t         seqno_max;
         seqno_t         seqno_released;
+
+        bool const      encrypt_cache;
 
 #ifndef NDEBUG
         std::set<const void*> buf_tracker;

@@ -56,6 +56,11 @@ namespace galera
         int trx_proto_ver() const { return trx_params_.version_; }
         int repl_proto_ver() const{ return protocol_version_; }
 
+        wsrep_status_t enc_set_key(const wsrep_enc_key_t& key)
+        {
+            gcache_.set_enc_key(key); return WSREP_OK;
+        }
+
         wsrep_status_t connect(const std::string& cluster_name,
                                const std::string& cluster_url,
                                const std::string& state_donor,

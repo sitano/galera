@@ -86,7 +86,7 @@ gcache::Page::malloc (size_type size)
         if (space_ >= sizeof(BufferHeader))
         {
             BH_clear (BH_cast(next_));
-            assert (reinterpret_cast<uint8_t*>(bh + 1) < next_);
+            assert (reinterpret_cast<uint8_t*>(bh + 0) <= next_);
         }
 
         assert (next_ <= static_cast<uint8_t*>(mmap_.ptr) + mmap_.size);
@@ -125,7 +125,8 @@ gcache::Page::realloc (void* ptr, size_type size)
 
             return ptr;
         }
-        else return 0; // not enough space in this page
+
+        return 0; // not enough space in this page
     }
     else
     {

@@ -52,9 +52,9 @@ namespace gcache
         /* GCache 3.x is not supposed to be portable between platforms */
         static size_type const ALIGNMENT  = GU_MIN_ALIGNMENT;
 
-        static inline size_type align_size(size_type s)
+        static inline size_type BH_aligned_size(size_type s)
         {
-            return align<size_type>(s);
+            return align<size_type>(s + sizeof(BufferHeader));
         }
 
         static inline uint8_t* align_ptr(uint8_t* p)

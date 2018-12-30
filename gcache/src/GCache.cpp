@@ -34,7 +34,9 @@ namespace gcache
 #endif
     }
 
-    GCache::GCache (gu::Config& cfg, const std::string& data_dir)
+    GCache::GCache (gu::Config& cfg,
+                    const std::string& data_dir,
+                    wsrep_encrypt_cb_t const encrypt_cb)
         :
         config    (cfg),
         params    (config, data_dir),
@@ -46,6 +48,7 @@ namespace gcache
         rb        (params.rb_name(), params.rb_size(), seqno2ptr, gid,
                    params.debug(), params.recover()),
         ps        (params.dir_name(),
+                   encrypt_cb,
                    params.keep_pages_size(),
                    params.page_size(),
                    params.debug(),
@@ -57,7 +60,8 @@ namespace gcache
         seqno_locked(SEQNO_NONE),
         seqno_max   (seqno2ptr.empty() ?
                      SEQNO_NONE : seqno2ptr.rbegin()->first),
-        seqno_released(seqno_max)
+        seqno_released(seqno_max),
+        encrypt_cache(NULL != encrypt_cb)
 #ifndef NDEBUG
         ,buf_tracker()
 #endif
@@ -72,7 +76,14 @@ namespace gcache
     }
 
     /*! prints object properties */
-    void print (std::ostream& os) {}
+    void GCache::print (std::ostream& os) {}
+
+    void GCache::set_enc_key(const wsrep_enc_key_t& key)
+    {
+        const uint8_t* const ptr(static_cast<const uint8_t*>(key.ptr));
+        PageStore::EncKey k(ptr, ptr + key.len);
+        ps.set_enc_key(k);
+    }
 }
 
 #include "gcache.h"

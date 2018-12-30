@@ -125,6 +125,15 @@ gcache::PageStore::reset ()
     while (pages_.size() > 0 && delete_page()) {};
 }
 
+void
+gcache::PageStore::set_enc_key (const EncKey& k)
+{
+    /* on key change create new page (saves current key there) */
+    size_type const meta_size(Page::meta_size(enc_key_.size()));
+    new_page(meta_size > page_size_ ? meta_size : page_size_);
+    enc_key_ = k;
+}
+
 inline void
 gcache::PageStore::new_page (size_type size)
 {
@@ -135,15 +144,24 @@ gcache::PageStore::new_page (size_type size)
     total_size_ += page->size();
     current_ = page;
     count_++;
+
+    // allocate, write and release key buffer
+    size_type const key_buf_size(MemOps::BH_aligned_size(enc_key_.size()));
+    BufferHeader* const bh(ptr2BH(current_->malloc(key_buf_size)));
+    BH_release(bh);
+    current_->discard(bh);
 }
 
 gcache::PageStore::PageStore (const std::string& dir_name,
+                              wsrep_encrypt_cb_t encrypt_cb,
                               size_t             keep_size,
                               size_t             page_size,
                               int                dbg,
                               bool               keep_page)
     :
     base_name_ (make_base_name(dir_name)),
+    encrypt_cb_(encrypt_cb),
+    enc_key_   (),
     keep_size_ (keep_size),
     page_size_ (page_size),
     keep_page_ (keep_page),
@@ -206,15 +224,18 @@ gcache::PageStore::~PageStore ()
 }
 
 inline void*
-gcache::PageStore::malloc_new (size_type size)
+gcache::PageStore::malloc_new (size_type const size)
 {
     Limits::assert_size(size);
 
     void* ret(NULL);
 
+    size_t const meta_size(Page::meta_size(enc_key_.size()));
+    size_t const min_page_size(size + meta_size);
+
     try
     {
-        new_page (page_size_ > size ? page_size_ : size);
+        new_page (page_size_ > min_page_size ? page_size_ : min_page_size);
         ret = current_->malloc (size);
         cleanup();
     }

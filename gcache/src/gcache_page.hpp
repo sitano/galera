@@ -92,6 +92,12 @@ namespace gcache
 
         void set_debug(int const dbg) { debug_ = dbg; }
 
+        /* amount of space that will be reserved for metadata */
+        static size_t meta_size(size_t enc_key_size)
+        {
+            return sizeof(BufferHeader) + enc_key_size;
+        }
+
     private:
 
         gu::FileDescriptor fd_;

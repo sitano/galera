@@ -14,6 +14,7 @@
 
 #include <string>
 #include <deque>
+#include <vector>
 
 namespace gcache
 {
@@ -22,6 +23,7 @@ namespace gcache
     public:
 
         PageStore (const std::string& dir_name,
+                   wsrep_encrypt_cb_t encrypt_cb,
                    size_t             keep_size,
                    size_t             page_size,
                    int                dbg,
@@ -49,6 +51,9 @@ namespace gcache
 
         void  reset();
 
+        typedef std::vector<uint8_t> EncKey;
+        void  set_enc_key(const EncKey& key);
+
         void  set_page_size (size_t size) { page_size_ = size; }
 
         void  set_keep_size (size_t size) { keep_size_ = size; }
@@ -65,6 +70,8 @@ namespace gcache
         static int  const DEBUG = 4; // debug flag
 
         std::string const base_name_; /* /.../.../gcache.page. */
+        wsrep_encrypt_cb_t encrypt_cb_;
+        EncKey            enc_key_;
         size_t            keep_size_; /* how much pages to keep after freeing*/
         size_t            page_size_; /* min size of the individual page */
         bool        const keep_page_; /* whether to keep the last page */
