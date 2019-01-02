@@ -70,6 +70,11 @@ namespace gcache
             Cond(size_t s) : upto_(s), done_(0) {}
             bool check() const { return done_ < upto_; }
             void update(const BufferHeader* bh) { done_ += bh->size; }
+            /* bh->size is actually a conservative freed estimate due to
+             * store buffer alignment, which is different for each store
+             * type. However it is not necessary to be exact here. Were are
+             * just trying to discard some buffers because there are too many
+             * allocated */
             void debug_begin()
             {
                 log_info << "GCache::discard_size(" << upto_ << ")";
@@ -148,11 +153,13 @@ namespace gcache
 
         if (gu_likely(s > 0))
         {
-            size_type const size(MemOps::BH_aligned_size(s));
+            size_type const size(BH_size(s));
 
             gu::Lock lock(mtx);
 
             bool const page_cleanup(ps.page_cleanup_needed());
+            /* try to discard twice as much as being allocated in order to
+             * eventually delete some pages */
             if (page_cleanup) discard_size(2*size);
 
             mallocs++;
@@ -266,7 +273,7 @@ namespace gcache
 
         assert((uintptr_t(ptr) % MemOps::ALIGNMENT) == 0);
 
-        size_type const size(MemOps::BH_aligned_size(s));
+        size_type const size(BH_size(s));
 
         void*               new_ptr(NULL);
         BufferHeader* const bh(ptr2BH(ptr));

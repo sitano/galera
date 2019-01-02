@@ -30,19 +30,22 @@ START_TEST(test1)
     fail_if(ps.total_pages() != 0,"expected 0 pages, got %zu",ps.total_pages());
     fail_if(ps.total_size()  != 0,"expected size 0, got %zu", ps.total_size());
 
-    void* buf = ps.malloc (3 + bh_size);
+    size_t size(3 + bh_size);
+    void* buf = ps.malloc (size);
 
     fail_if (0 == buf);
     fail_if(ps.count()       != 1,"expected count 1, got %zu",ps.count());
     fail_if(ps.total_pages() != 1,"expected 1 pages, got %zu",ps.total_pages());
 
-    void* tmp = ps.realloc (buf, 2 + bh_size);
+    size -= 1;
+    void* tmp = ps.realloc (buf, size);
 
     fail_if (buf != tmp);
     fail_if(ps.count()       != 1,"expected count 1, got %zu",ps.count());
     fail_if(ps.total_pages() != 1,"expected 1 pages, got %zu",ps.total_pages());
 
-    tmp = ps.realloc (buf, 4 + bh_size); // here new page should be allocated
+    size += gcache::Page::ALIGNMENT;
+    tmp = ps.realloc (buf, size); // here new page should be allocated
 
     fail_if (0 == tmp);
     fail_if (buf == tmp);
@@ -89,13 +92,14 @@ START_TEST(test3) // check that all page size is efficiently used
 {
     const char* const dir_name = "";
     ssize_t const keep_size = 1;
-    ssize_t const page_size = 1024;
+    ssize_t const page_size = 1024 + gcache::Page::meta_size(0);
 
     gcache::PageStore ps (dir_name, NULL, keep_size, page_size, 0, false);
 
     mark_point();
 
     ssize_t ptr_size = ((page_size - gcache::Page::meta_size(0)) / 2);
+    /* exactly half of the payload */
 
     void* ptr1 = ps.malloc (ptr_size);
     fail_if (0 == ptr1);

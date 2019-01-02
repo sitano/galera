@@ -49,7 +49,7 @@ gcache::Page::drop_fs_cache() const
 gcache::Page::Page (void* ps, const std::string& name, size_t size,
                     int dbg)
     :
-    fd_   (name, size, false, false),
+    fd_   (name, aligned_size(size), false, false),
     mmap_ (fd_),
     ps_   (ps),
     next_ (static_cast<uint8_t*>(mmap_.ptr)),
@@ -66,8 +66,9 @@ void*
 gcache::Page::malloc (size_type size)
 {
     Limits::assert_size(size);
+    size_type const alloc_size(aligned_size(size));
 
-    if (size <= space_)
+    if (alloc_size <= space_)
     {
         BufferHeader* bh(BH_cast(next_));
 
@@ -77,9 +78,9 @@ gcache::Page::malloc (size_type size)
         bh->flags   = 0;
         bh->store   = BUFFER_IN_PAGE;
 
-        assert(space_ >= size);
-        space_ -= size;
-        next_  += size;
+        assert(space_ >= alloc_size);
+        space_ -= alloc_size;
+        next_  += alloc_size;
         used_++;
 
 #ifndef NDEBUG
@@ -109,16 +110,18 @@ void*
 gcache::Page::realloc (void* ptr, size_type size)
 {
     Limits::assert_size(size);
+    size_type const alloc_size(aligned_size(size));
 
     BufferHeader* bh(ptr2BH(ptr));
+    size_type const bh_offset(aligned_size(bh->size));
 
-    if (bh == BH_cast(next_ - bh->size)) // last buffer, can shrink and expand
+    if (bh == BH_cast(next_ - bh_offset)) // last buffer, can shrink and expand
     {
-        diff_type const diff_size (size - bh->size);
+        diff_type const diff_size (alloc_size - bh_offset);
 
-        if (gu_likely (diff_size < 0 || size_t(diff_size) < space_))
+        if (gu_likely (diff_size <= 0 || size_t(diff_size) < space_))
         {
-            bh->size += diff_size;
+            bh->size  = size;
             space_   -= diff_size;
             next_    += diff_size;
             BH_clear (BH_cast(next_));
@@ -130,7 +133,7 @@ gcache::Page::realloc (void* ptr, size_type size)
     }
     else
     {
-        if (gu_likely(size > 0 && uint32_t(size) > bh->size))
+        if (gu_likely(size > 0 && alloc_size > bh_offset))
         {
             void* const ret (malloc (size));
 

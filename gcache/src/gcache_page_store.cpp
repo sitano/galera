@@ -146,7 +146,7 @@ gcache::PageStore::new_page (size_type size)
     count_++;
 
     // allocate, write and release key buffer
-    size_type const key_buf_size(MemOps::BH_aligned_size(enc_key_.size()));
+    size_type const key_buf_size(BH_size(enc_key_.size()));
     BufferHeader* const bh(ptr2BH(current_->malloc(key_buf_size)));
     BH_release(bh);
     current_->discard(bh);
@@ -231,7 +231,7 @@ gcache::PageStore::malloc_new (size_type const size)
     void* ret(NULL);
 
     size_t const meta_size(Page::meta_size(enc_key_.size()));
-    size_t const min_page_size(size + meta_size);
+    size_t const min_page_size(Page::aligned_size(size) + meta_size);
 
     try
     {
@@ -285,10 +285,10 @@ gcache::PageStore::realloc (void* ptr, size_type const size)
 
     if (gu_likely(0 != ret))
     {
-        assert(bh->size > sizeof(BufferHeader));
+        assert(bh->size >= sizeof(BufferHeader));
         size_type const ptr_size(bh->size - sizeof(BufferHeader));
 
-        memcpy (ret, ptr, size > ptr_size ? ptr_size : size);
+        ::memcpy (ret, ptr, size > ptr_size ? ptr_size : size);
         BH_release(bh);
         release<false>(bh);
     }

@@ -40,20 +40,20 @@ namespace gcache
 
         void repossess(BufferHeader* bh)
         {
-            assert(bh->size > 0);
+            assert(bh->size >= sizeof(BufferHeader));
             assert(bh->seqno_g != SEQNO_NONE);
             assert(bh->store == BUFFER_IN_RB);
             assert(bh->ctx == reinterpret_cast<BH_ctx_t>(this));
             assert(BH_is_released(bh)); // will be marked unreleased by caller
-            assert(size_used_ + bh->size <= size_cache_);
-            size_used_ += bh->size;
+            assert(size_used_ + aligned_size(bh->size) <= size_cache_);
+            size_used_ += aligned_size(bh->size);
         }
 
         void  discard (BufferHeader* const bh)
         {
             assert (BH_is_released(bh));
             assert (SEQNO_ILL == bh->seqno_g);
-            size_free_ += bh->size;
+            size_free_ += aligned_size(bh->size);
             assert (size_free_ <= size_cache_);
         }
 
@@ -125,6 +125,13 @@ namespace gcache
 
         void set_debug(int const dbg) { debug_ = dbg & DEBUG; }
 
+        static const size_type ALIGNEMENT = GU_MIN_ALIGNMENT;
+
+        static inline size_type aligned_size(size_type s)
+        {
+            return GU_ALIGN(s, ALIGNMENT);
+        }
+
     private:
 
         static size_t const PREAMBLE_LEN = 1024;
@@ -179,6 +186,18 @@ namespace gcache
         void          recover(off_t offset, int version);
 
         void          estimate_space();
+
+        static inline size_type
+        BH_offset(const BufferHeader* bh)
+        {
+            return aligned_size(bh->size);
+        }
+
+        static inline BufferHeader*
+        BH_next(BufferHeader* bh)
+        {
+            return BH_cast(reinterpret_cast<uint8_t*>(bh) + BH_offset(bh));
+        }
 
         RingBuffer(const gcache::RingBuffer&);
         RingBuffer& operator=(const gcache::RingBuffer&);

@@ -23,7 +23,7 @@ typedef MemOps::size_type size_type;
 
 static size_type ALLOC_SIZE(size_type s)
 {
-    return MemOps::align_size(s + BH_SIZE);
+    return gcache::RingBuffer::aligned_size(BH_size(s));
 }
 
 START_TEST(test1)
@@ -45,7 +45,7 @@ START_TEST(test1)
         fail(os.str().c_str());
     }
 
-    void* buf1 = rb.malloc (MemOps::align_size(rb_size/2 + 1));
+    void* buf1 = rb.malloc (rb_size/2 + 1);
     fail_if (NULL != buf1); // > 1/2 size
 
     buf1 = rb.malloc (ALLOC_SIZE(1));

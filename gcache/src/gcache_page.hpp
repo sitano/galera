@@ -33,10 +33,10 @@ namespace gcache
         void  free    (BufferHeader* bh)
         {
             assert(bh >= mmap_.ptr);
-            assert(static_cast<void*>(bh) <=
+            assert(static_cast<void*>(bh) <= // checks that bh is within page
                    (static_cast<uint8_t*>(mmap_.ptr) + mmap_.size -
                     sizeof(BufferHeader)));
-            assert(bh->size > 0);
+            assert(bh->size >= sizeof(BufferHeader));
             assert(bh->store == BUFFER_IN_PAGE);
             assert(bh->ctx == reinterpret_cast<BH_ctx_t>(this));
             assert(BH_is_released(bh));
@@ -53,8 +53,8 @@ namespace gcache
         void  repossess(BufferHeader* bh)
         {
             assert(bh >= mmap_.ptr);
-            assert(reinterpret_cast<uint8_t*>(bh) + bh->size <= next_);
-            assert(bh->size > 0);
+            assert(BH_next(bh) <= BH_cast(next_));
+            assert(bh->size >= sizeof(BufferHeader));
             assert(bh->seqno_g != SEQNO_NONE);
             assert(bh->store == BUFFER_IN_PAGE);
             assert(bh->ctx == reinterpret_cast<BH_ctx_t>(this));
@@ -92,10 +92,18 @@ namespace gcache
 
         void set_debug(int const dbg) { debug_ = dbg; }
 
-        /* amount of space that will be reserved for metadata */
-        static size_t meta_size(size_t enc_key_size)
+        static const size_type ALIGNEMENT = 16;
+        /* typical encryption block size */
+
+        static inline size_type aligned_size(size_type s)
         {
-            return sizeof(BufferHeader) + enc_key_size;
+            return GU_ALIGN(s, ALIGNMENT);
+        }
+
+        /* amount of space that will be reserved for metadata */
+        static size_type meta_size(size_type enc_key_size)
+        {
+            return aligned_size(sizeof(BufferHeader) + enc_key_size);
         }
 
     private:
@@ -107,6 +115,16 @@ namespace gcache
         size_t             space_;
         size_t             used_;
         int                debug_;
+
+        GU_COMPILE_ASSERT(ALIGNMENT % GU_MIN_ALIGNMENT == 0,
+                          page_alignment_is_not_multiple_of_min_alignment);
+
+        static inline BufferHeader*
+        BH_next(BufferHeader* bh)
+        {
+            return BH_cast(reinterpret_cast<uint8_t*>(bh) +
+                           aligned_size(bh->size));
+        }
 
         Page(const gcache::Page&);
         Page& operator=(const gcache::Page&);
