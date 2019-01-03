@@ -81,7 +81,7 @@ namespace gcache
     void GCache::set_enc_key(const wsrep_enc_key_t& key)
     {
         const uint8_t* const ptr(static_cast<const uint8_t*>(key.ptr));
-        PageStore::EncKey k(ptr, ptr + key.len);
+        Page::EncKey k(ptr, ptr + key.len);
         ps.set_enc_key(k);
     }
 }

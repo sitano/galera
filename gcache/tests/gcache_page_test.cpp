@@ -19,10 +19,17 @@ static void ps_free (void* ptr)
 
 START_TEST(test1)
 {
+    log_info << "\n"
+        "##########################\n"
+        "##                      ##\n"
+        "##        Test 1        ##\n"
+        "##                      ##\n"
+        "##########################\n";
+
     const char* const dir_name = "";
     ssize_t const bh_size = sizeof(gcache::BufferHeader);
     ssize_t const keep_size = 1;
-    ssize_t const page_size = 2 + bh_size + gcache::Page::meta_size(0);
+    ssize_t const page_size = 2 + bh_size + gcache::Page::meta_size(BH_size(0));
 
     gcache::PageStore ps (dir_name, NULL, keep_size, page_size, 0, false);
 
@@ -33,22 +40,22 @@ START_TEST(test1)
     size_t size(3 + bh_size);
     void* buf = ps.malloc (size);
 
-    fail_if (0 == buf);
+    fail_if(0 == buf);
     fail_if(ps.count()       != 1,"expected count 1, got %zu",ps.count());
     fail_if(ps.total_pages() != 1,"expected 1 pages, got %zu",ps.total_pages());
 
     size -= 1;
     void* tmp = ps.realloc (buf, size);
 
-    fail_if (buf != tmp);
+    fail_if(buf != tmp);
     fail_if(ps.count()       != 1,"expected count 1, got %zu",ps.count());
     fail_if(ps.total_pages() != 1,"expected 1 pages, got %zu",ps.total_pages());
 
     size += gcache::Page::ALIGNMENT;
     tmp = ps.realloc (buf, size); // here new page should be allocated
 
-    fail_if (0 == tmp);
-    fail_if (buf == tmp);
+    fail_if(0   == tmp);
+    fail_if(buf == tmp);
     fail_if(ps.count()       != 2,"expected count 2, got %zu",ps.count());
     fail_if(ps.total_pages() != 1,"expected 1 pages, got %zu",ps.total_pages());
 
@@ -63,6 +70,13 @@ END_TEST
 
 START_TEST(test2)
 {
+    log_info << "\n"
+        "##########################\n"
+        "##                      ##\n"
+        "##        Test 2        ##\n"
+        "##                      ##\n"
+        "##########################\n";
+
     const char* const dir_name = "";
     ssize_t const bh_size = sizeof(gcache::BufferHeader);
     ssize_t const keep_size = 1;
@@ -90,16 +104,25 @@ END_TEST
 
 START_TEST(test3) // check that all page size is efficiently used
 {
+    log_info << "\n"
+        "##########################\n"
+        "##                      ##\n"
+        "##        Test 3        ##\n"
+        "##                      ##\n"
+        "##########################\n";
+
     const char* const dir_name = "";
     ssize_t const keep_size = 1;
-    ssize_t const page_size = 1024 + gcache::Page::meta_size(0);
+    ssize_t const page_overhead(gcache::Page::meta_size(BH_size(0)));
+    ssize_t const page_size = 1024 + page_overhead;
 
-    gcache::PageStore ps (dir_name, NULL, keep_size, page_size, 0, false);
+    gcache::PageStore ps (dir_name, NULL, keep_size, page_size, 0, true);
 
     mark_point();
 
-    ssize_t ptr_size = ((page_size - gcache::Page::meta_size(0)) / 2);
+    ssize_t ptr_size = ((page_size - page_overhead) / 2);
     /* exactly half of the payload */
+    assert(ptr_size == gcache::Page::aligned_size(ptr_size));
 
     void* ptr1 = ps.malloc (ptr_size);
     fail_if (0 == ptr1);
@@ -121,11 +144,18 @@ END_TEST
 
 START_TEST(test4) // check that pages linger correctly and get deleted as they
 {                 // should when keep_size is exceeded
+    log_info << "\n"
+        "##########################\n"
+        "##                      ##\n"
+        "##        Test 4        ##\n"
+        "##                      ##\n"
+        "##########################\n";
+
     const char* const dir_name = "";
     ssize_t const page_size = 1024;
     ssize_t const keep_pages = 3;
     ssize_t const keep_size = keep_pages * page_size;
-    ssize_t const alloc_size = page_size - gcache::Page::meta_size(0);
+    ssize_t const alloc_size = page_size - gcache::Page::meta_size(BH_size(0));
     size_t expect;
 
     gcache::PageStore ps(dir_name, NULL, keep_size, page_size, 0, false);

@@ -10,11 +10,9 @@
 #include "gcache_memops.hpp"
 #include "gcache_page.hpp"
 #include "gcache_seqno.hpp"
-//#include "gcache_page_deleter.hpp" remove
 
 #include <string>
 #include <deque>
-#include <vector>
 
 namespace gcache
 {
@@ -51,8 +49,7 @@ namespace gcache
 
         void  reset();
 
-        typedef std::vector<uint8_t> EncKey;
-        void  set_enc_key(const EncKey& key);
+        void  set_enc_key(const Page::EncKey& key);
 
         void  set_page_size (size_t size) { page_size_ = size; }
 
@@ -71,8 +68,9 @@ namespace gcache
 
         std::string const base_name_; /* /.../.../gcache.page. */
         wsrep_encrypt_cb_t encrypt_cb_;
-        EncKey            enc_key_;
-        size_t            keep_size_; /* how much pages to keep after freeing*/
+        Page::EncKey      enc_key_;   /* current key */
+        Page::Nonce       nonce_;     /* current nonce */
+        size_t            keep_size_; /* how much pages to keep after freeing */
         size_t            page_size_; /* min size of the individual page */
         bool        const keep_page_; /* whether to keep the last page */
         size_t            count_;
@@ -86,7 +84,7 @@ namespace gcache
         pthread_t         delete_thr_;
 #endif /* GCACHE_DETACH_THREAD */
 
-        void new_page    (size_type size);
+        void new_page    (size_type size, const Page::EncKey& k);
 
         // returns true if a page could be deleted
         bool delete_page ();
@@ -107,6 +105,8 @@ namespace gcache
 
             if (0 == page->used()) cleanup();
         }
+
+        void initialize_nonce();
 
         PageStore(const gcache::PageStore&);
         PageStore& operator=(const gcache::PageStore&);

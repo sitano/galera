@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
  */
 
 /*! @file page file class implementation */
@@ -16,6 +16,49 @@
 #endif
 #include <fcntl.h>
 
+// for nonce initialization
+#include <chrono>
+#include <random>
+
+gcache::Page::Nonce::Nonce() : d()
+{
+    std::random_device r;
+    uint64_t const seed1(r());
+
+    /* just in case random_device implementation happens to be too
+     * determenistic, add a seed based on time. */
+    uint64_t const seed2(std::chrono::high_resolution_clock::now()
+                         .time_since_epoch().count());
+    assert(seed2 != 0);
+
+    std::seed_seq seeds{ seed1, seed2 };
+    std::mt19937 rng(seeds);
+
+    for (size_t i(0); i < (sizeof(d.i)/sizeof(d.i[0])); ++i)
+    {
+        d.i[i] = rng();
+    }
+}
+
+/* how much to write to buffer given buffer size */
+static inline size_t nonce_serial_size(size_t const buf_size)
+{
+    return std::min(gcache::Page::Nonce::size(), buf_size);
+}
+
+gcache::Page::Nonce::Nonce(const void* const ptr, size_t const size) : d()
+{
+    ::memcpy(&d, ptr, nonce_serial_size(size));
+}
+
+size_t
+gcache::Page::Nonce::write(void* const ptr, size_t const size) const
+{
+    size_t const write_size(nonce_serial_size(size));
+    ::memcpy(ptr, &d, write_size);
+    return write_size;
+}
+
 void
 gcache::Page::reset ()
 {
@@ -26,8 +69,10 @@ gcache::Page::reset ()
         abort();
     }
 
-    space_ = mmap_.size;
-    next_  = static_cast<uint8_t*>(mmap_.ptr);
+    /* preserve the nonce */
+    size_type const nonce_size(Page::aligned_size(nonce_.write(next_, space_)));
+    space_ = mmap_.size - nonce_size;
+    next_  = static_cast<uint8_t*>(mmap_.ptr) + nonce_size;
 }
 
 void
@@ -46,20 +91,29 @@ gcache::Page::drop_fs_cache() const
 #endif
 }
 
-gcache::Page::Page (void* ps, const std::string& name, size_t size,
+gcache::Page::Page (void*              ps,
+                    const std::string& name,
+                    const Nonce&       nonce,
+                    const EncKey&      key,
+                    size_t size,
                     int dbg)
     :
     fd_   (name, aligned_size(size), false, false),
     mmap_ (fd_),
+    key_  (key),
+    nonce_(nonce),
     ps_   (ps),
     next_ (static_cast<uint8_t*>(mmap_.ptr)),
     space_(mmap_.size),
     used_ (0),
     debug_(dbg)
 {
+    size_type const nonce_size(Page::aligned_size(nonce_.write(next_, space_)));
+    next_  += nonce_size;
+    space_ -= nonce_size;
+
     log_info << "Created page " << name << " of size " << space_
              << " bytes";
-    BH_clear (BH_cast(next_));
 }
 
 void

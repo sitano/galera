@@ -126,30 +126,42 @@ gcache::PageStore::reset ()
 }
 
 void
-gcache::PageStore::set_enc_key (const EncKey& k)
+gcache::PageStore::set_enc_key (const Page::EncKey& new_key)
 {
     /* on key change create new page (saves current key there) */
-    size_type const meta_size(Page::meta_size(enc_key_.size()));
-    new_page(meta_size > page_size_ ? meta_size : page_size_);
-    enc_key_ = k;
+    new_page(0, new_key);
+    enc_key_ = new_key;
 }
 
 inline void
-gcache::PageStore::new_page (size_type size)
+gcache::PageStore::new_page (size_type const size, const Page::EncKey& new_key)
 {
-    Page* const page(new Page
-                     (this, make_page_name (base_name_, count_), size, debug_));
+    size_type const key_buf_size(BH_size(enc_key_.size()));
+    size_type const meta_size(Page::meta_size(key_buf_size));
+    size_type const min_size(meta_size + Page::aligned_size(size));
+
+    Page* const page(new Page(this,
+                              make_page_name(base_name_, count_),
+                              nonce_,
+                              new_key,
+                              page_size_ > min_size ? page_size_ : min_size,
+                              debug_));
 
     pages_.push_back (page);
     total_size_ += page->size();
     current_ = page;
     count_++;
+    nonce_ += page->size(); /* advance nonce for the next page */
 
     // allocate, write and release key buffer
-    size_type const key_buf_size(BH_size(enc_key_.size()));
-    BufferHeader* const bh(BH_cast(current_->malloc(key_buf_size)));
+    void* const kp(current_->malloc(key_buf_size));
+    std::vector<uint8_t> kv(key_buf_size); // plaintext key buffer
+    BufferHeader* const bh(BH_cast(kv.data()));
+    BH_clear(bh);
+    bh->size = key_buf_size;
     BH_release(bh);
-    current_->discard(bh);
+    ::memcpy(kp, bh, key_buf_size);
+    current_->discard(BH_cast(kp));
 }
 
 gcache::PageStore::PageStore (const std::string& dir_name,
@@ -162,6 +174,7 @@ gcache::PageStore::PageStore (const std::string& dir_name,
     base_name_ (make_base_name(dir_name)),
     encrypt_cb_(encrypt_cb),
     enc_key_   (),
+    nonce_     (),
     keep_size_ (keep_size),
     page_size_ (page_size),
     keep_page_ (keep_page),
@@ -230,12 +243,9 @@ gcache::PageStore::malloc_new (size_type const size)
 
     void* ret(NULL);
 
-    size_t const meta_size(Page::meta_size(enc_key_.size()));
-    size_t const min_page_size(Page::aligned_size(size) + meta_size);
-
     try
     {
-        new_page (page_size_ > min_page_size ? page_size_ : min_page_size);
+        new_page(size, enc_key_);
         ret = current_->malloc (size);
         cleanup();
     }
@@ -245,7 +255,7 @@ gcache::PageStore::malloc_new (size_type const size)
                   << e.what();
         // abort();
     }
-
+    assert(ret);
     return ret;
 }
 

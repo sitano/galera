@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
  */
 
 /*! @file page file class */
@@ -13,9 +13,11 @@
 #include "gu_fdesc.hpp"
 #include "gu_mmap.hpp"
 #include "gu_logger.hpp"
+#include "gu_byteswap.hpp"
 
 #include <string>
 #include <ostream>
+#include <vector>
 
 namespace gcache
 {
@@ -23,7 +25,40 @@ namespace gcache
     {
     public:
 
-        Page (void* ps, const std::string& name, size_t size, int dbg);
+        class Nonce
+        {
+        public:
+            Nonce();                             /* constructs random nonce */
+            Nonce(const void* buf, size_t size); /* reads nonce from buffer */
+            size_t write(void* buf, size_t size)const;/* write nonce to buffer */
+            const wsrep_enc_iv_t* iv() const { return &d.iv; }
+            const void* ptr() const { return &d; }
+            static size_t size()
+            {
+                return sizeof(Nonce::d);
+            }
+            Nonce& operator +=(uint64_t i)
+            {
+                d.l[0] = gu::htog<uint64_t>(gu::gtoh<uint64_t>(d.l[0]) + i);
+                return *this;
+            }
+
+        private:
+            union { wsrep_enc_iv_t iv; uint32_t i[8]; uint64_t l[4]; } d;
+
+            GU_COMPILE_ASSERT(sizeof(d.iv) == sizeof(d.l), size_fail1);
+            GU_COMPILE_ASSERT(sizeof(d.i)  == sizeof(d.l), size_fail2);
+        };
+
+        typedef std::vector<uint8_t> EncKey;
+
+        Page (void*              ps,
+              const std::string& name,
+              const Nonce&       nonce,
+              const EncKey&      key,
+              size_t             size,
+              int                dbg);
+
         ~Page () {}
 
         void* malloc  (size_type size);
@@ -103,13 +138,16 @@ namespace gcache
         /* amount of space that will be reserved for metadata */
         static size_type meta_size(size_type enc_key_size)
         {
-            return Page::aligned_size(sizeof(BufferHeader) + enc_key_size);
+            return Page::aligned_size(sizeof(Nonce)) +
+                   Page::aligned_size(enc_key_size);
         }
 
     private:
 
         gu::FileDescriptor fd_;
         gu::MMap           mmap_;
+        EncKey             key_;
+        Nonce              nonce_;
         void*              ps_;
         uint8_t*           next_;
         size_t             space_;
@@ -130,7 +168,8 @@ namespace gcache
 
         Page(const gcache::Page&);
         Page& operator=(const gcache::Page&);
-    };
+
+    }; /* class Page */
 
     static inline std::ostream&
     operator <<(std::ostream& os, const gcache::Page& p)
@@ -138,6 +177,14 @@ namespace gcache
         p.print(os);
         return os;
     }
-}
+
+    static inline gcache::Page::Nonce
+    operator +(gcache::Page::Nonce n, uint64_t const i)
+    {
+        n += i;
+        return n;
+    }
+
+} /* namespace gcache */
 
 #endif /* _gcache_page_hpp_ */
