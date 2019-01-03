@@ -62,6 +62,13 @@ gcache::Page::Page (void* ps, const std::string& name, size_t size,
     BH_clear (BH_cast(next_));
 }
 
+void
+gcache::Page::close()
+{
+    // write empty header to signify end of chain for subsequent recovery
+    if (space_ >= sizeof(BufferHeader)) BH_clear(BH_cast(next_));
+}
+
 void*
 gcache::Page::malloc (size_type size)
 {
@@ -70,35 +77,23 @@ gcache::Page::malloc (size_type size)
 
     if (alloc_size <= space_)
     {
-        BufferHeader* bh(BH_cast(next_));
-
-        bh->size    = size;
-        bh->seqno_g = SEQNO_NONE;
-        bh->ctx     = reinterpret_cast<BH_ctx_t>(this);
-        bh->flags   = 0;
-        bh->store   = BUFFER_IN_PAGE;
-
-        assert(space_ >= alloc_size);
+        void* ret = next_;
         space_ -= alloc_size;
         next_  += alloc_size;
         used_++;
 
 #ifndef NDEBUG
-        if (space_ >= sizeof(BufferHeader))
-        {
-            BH_clear (BH_cast(next_));
-            assert (reinterpret_cast<uint8_t*>(bh + 0) <= next_);
-        }
-
         assert (next_ <= static_cast<uint8_t*>(mmap_.ptr) + mmap_.size);
-
-        if (debug_) { log_info << name() << " allocd " << bh; }
+        if (debug_)
+        {
+            log_info << name() << " allocd " << size << '/' << alloc_size;
+        }
 #endif
-
-        return (bh + 1);
+        return ret;
     }
     else
     {
+        close(); // this page will not be used any more.
         log_debug << "Failed to allocate " << size << " bytes, space left: "
                   << space_ << " bytes, total allocated: "
                   << next_ - static_cast<uint8_t*>(mmap_.ptr);
@@ -109,49 +104,8 @@ gcache::Page::malloc (size_type size)
 void*
 gcache::Page::realloc (void* ptr, size_type size)
 {
-    Limits::assert_size(size);
-    size_type const alloc_size(aligned_size(size));
-
-    BufferHeader* bh(ptr2BH(ptr));
-    size_type const bh_offset(aligned_size(bh->size));
-
-    if (bh == BH_cast(next_ - bh_offset)) // last buffer, can shrink and expand
-    {
-        diff_type const diff_size (alloc_size - bh_offset);
-
-        if (gu_likely (diff_size <= 0 || size_t(diff_size) < space_))
-        {
-            bh->size  = size;
-            space_   -= diff_size;
-            next_    += diff_size;
-            BH_clear (BH_cast(next_));
-
-            return ptr;
-        }
-
-        return 0; // not enough space in this page
-    }
-    else
-    {
-        if (gu_likely(size > 0 && alloc_size > bh_offset))
-        {
-            void* const ret (malloc (size));
-
-            if (ret)
-            {
-                memcpy (ret, ptr, bh->size - sizeof(BufferHeader));
-                assert(used_ > 0);
-                used_--;
-            }
-
-            return ret;
-        }
-        else
-        {
-            // do nothing, we can't shrink the buffer, it is locked
-            return ptr;
-        }
-    }
+    assert(0); // all logic must go to PageStore.
+    return NULL;
 }
 
 void gcache::Page::print(std::ostream& os) const

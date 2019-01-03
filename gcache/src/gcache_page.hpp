@@ -92,18 +92,18 @@ namespace gcache
 
         void set_debug(int const dbg) { debug_ = dbg; }
 
-        static const size_type ALIGNEMENT = 16;
+        static const size_type ALIGNMENT = 16;
         /* typical encryption block size */
 
         static inline size_type aligned_size(size_type s)
         {
-            return GU_ALIGN(s, ALIGNMENT);
+            return GU_ALIGN(s, Page::ALIGNMENT);
         }
 
         /* amount of space that will be reserved for metadata */
         static size_type meta_size(size_type enc_key_size)
         {
-            return aligned_size(sizeof(BufferHeader) + enc_key_size);
+            return Page::aligned_size(sizeof(BufferHeader) + enc_key_size);
         }
 
     private:
@@ -125,6 +125,8 @@ namespace gcache
             return BH_cast(reinterpret_cast<uint8_t*>(bh) +
                            aligned_size(bh->size));
         }
+
+        void close(); /* close page for allocation */
 
         Page(const gcache::Page&);
         Page& operator=(const gcache::Page&);

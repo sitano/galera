@@ -147,7 +147,7 @@ gcache::PageStore::new_page (size_type size)
 
     // allocate, write and release key buffer
     size_type const key_buf_size(BH_size(enc_key_.size()));
-    BufferHeader* const bh(ptr2BH(current_->malloc(key_buf_size)));
+    BufferHeader* const bh(BH_cast(current_->malloc(key_buf_size)));
     BH_release(bh);
     current_->discard(bh);
 }
@@ -254,16 +254,22 @@ gcache::PageStore::malloc (size_type const size)
 {
     Limits::assert_size(size);
 
-    if (gu_likely (0 != current_))
+    BufferHeader* bh(NULL);
+
+    if (gu_likely(NULL != current_)) bh = BH_cast(current_->malloc(size));
+    if (gu_unlikely(NULL == bh)) bh = BH_cast(malloc_new(size));
+    if (gu_likely(NULL != bh))
     {
-        void* ret = current_->malloc (size);
+        bh->size    = size;
+        bh->seqno_g = SEQNO_NONE;
+        bh->ctx     = reinterpret_cast<BH_ctx_t>(current_);
+        bh->flags   = 0;
+        bh->store   = BUFFER_IN_PAGE;
 
-        if (gu_likely(0 != ret)) return ret;
-
-        current_->drop_fs_cache();
+        bh += 1; // point to payload
     }
 
-    return malloc_new (size);
+    return bh;
 }
 
 void*
@@ -275,22 +281,23 @@ gcache::PageStore::realloc (void* ptr, size_type const size)
 
     BufferHeader* const bh(ptr2BH(ptr));
     assert(SEQNO_NONE == bh->seqno_g);
-    Page* const page(static_cast<Page*>(BH_ctx(bh)));
 
-    void* ret(page->realloc(ptr, size));
+    size_type allocd_size(Page::aligned_size(bh->size));
+    if (size <= allocd_size)
+    {
+        bh->size = size;
+        return ptr;
+    }
 
-    if (0 != ret) return ret;
-
-    ret = malloc_new (size);
+    void* ret(malloc(size));
 
     if (gu_likely(0 != ret))
     {
-        assert(bh->size >= sizeof(BufferHeader));
+        assert(size > bh->size);
         size_type const ptr_size(bh->size - sizeof(BufferHeader));
-
-        ::memcpy (ret, ptr, size > ptr_size ? ptr_size : size);
+        ::memcpy (ret, ptr, ptr_size);
         BH_release(bh);
-        release<false>(bh);
+        release<true>(bh);
     }
 
     return ret;
