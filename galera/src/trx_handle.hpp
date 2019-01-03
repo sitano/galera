@@ -1,17 +1,17 @@
 //
-// Copyright (C) 2010-2018 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 
 #ifndef GALERA_TRX_HANDLE_HPP
 #define GALERA_TRX_HANDLE_HPP
 
-#include "write_set.hpp"
-#include "mapped_buffer.hpp"
 #include "fsm.hpp"
 #include "key_data.hpp" // for append_key()
 #include "key_entry_os.hpp"
 #include "write_set_ng.hpp"
+
+#include "GCache.hpp"
 
 #include "wsrep_api.h"
 #include "gu_mutex.hpp"
@@ -417,14 +417,19 @@ namespace galera
             return flags;
         }
 
-        template <bool from_group>
-        size_t unserialize(const gcs_action& act)
+        template <bool from_group, bool decrypt = true>
+        size_t unserialize(gcache::GCache& gcache, const gcs_action& act)
         {
             assert(GCS_ACT_WRITESET == act.type);
 
             try
             {
-                version_ = WriteSetNG::version(act.buf, act.size);
+                const void* plaintext(decrypt ?
+                                      gcache.get_plaintext(act.buf) : act.buf);
+                /* plaintext resource will be released on GCache::free() later
+                 * in trx lifecycle */
+
+                version_ = WriteSetNG::version(plaintext, act.size);
                 action_  = std::make_pair(act.buf, act.size);
 
                 switch (version_)
@@ -432,7 +437,7 @@ namespace galera
                 case WriteSetNG::VER3:
                 case WriteSetNG::VER4:
                 case WriteSetNG::VER5:
-                    write_set_.read_buf (act.buf, act.size);
+                    write_set_.read_buf (plaintext, act.size);
                     assert(version_ == write_set_.version());
                     write_set_flags_ = fixup_write_set_flags(
                         version_,

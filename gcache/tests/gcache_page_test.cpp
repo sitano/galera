@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -31,7 +31,7 @@ START_TEST(test1)
     ssize_t const keep_size = 1;
     ssize_t const page_size = 2 + bh_size + gcache::Page::meta_size(BH_size(0));
 
-    gcache::PageStore ps (dir_name, NULL, keep_size, page_size, 0, false);
+    gcache::PageStore ps(dir_name, NULL, keep_size, page_size,page_size,0,false);
 
     fail_if(ps.count()       != 0,"expected count 0, got %zu",ps.count());
     fail_if(ps.total_pages() != 0,"expected 0 pages, got %zu",ps.total_pages());
@@ -82,7 +82,7 @@ START_TEST(test2)
     ssize_t const keep_size = 1;
     ssize_t page_size = (1 << 20) + bh_size;
 
-    gcache::PageStore ps (dir_name, NULL, keep_size, page_size, 0, false);
+    gcache::PageStore ps(dir_name, NULL, keep_size, page_size,page_size,0,false);
 
     mark_point();
 
@@ -116,7 +116,7 @@ START_TEST(test3) // check that all page size is efficiently used
     ssize_t const page_overhead(gcache::Page::meta_size(BH_size(0)));
     ssize_t const page_size = 1024 + page_overhead;
 
-    gcache::PageStore ps (dir_name, NULL, keep_size, page_size, 0, true);
+    gcache::PageStore ps (dir_name, NULL, keep_size, page_size,page_size,0,true);
 
     mark_point();
 
@@ -158,7 +158,7 @@ START_TEST(test4) // check that pages linger correctly and get deleted as they
     ssize_t const alloc_size = page_size - gcache::Page::meta_size(BH_size(0));
     size_t expect;
 
-    gcache::PageStore ps(dir_name, NULL, keep_size, page_size, 0, false);
+    gcache::PageStore ps(dir_name, NULL, keep_size, page_size,page_size,0,false);
 
     fail_if(ps.count() != 0);
     fail_if(ps.total_pages() != 0);

@@ -515,7 +515,7 @@ void galera::ist::Receiver::run()
                                       TrxHandleSlaveDeleter()));
                 if (act.size > 0)
                 {
-                    gu_trace(ts->unserialize<false>(act));
+                    gu_trace(ts->unserialize<false>(gcache_, act));
                     ts->set_local(false);
                     assert(ts->global_seqno() == act.seqno_g);
                     assert(ts->depends_seqno() >= 0 || ts->nbo_end());

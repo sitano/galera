@@ -1845,7 +1845,9 @@ gcs_group_act_conf (gcs_group_t*         group,
     rcvd->act.buf = gcache_malloc(group->cache, rcvd->act.buf_len);
     if (rcvd->act.buf)
     {
-        memcpy(const_cast<void*>(rcvd->act.buf), tmp, rcvd->act.buf_len);
+        void* const ptr(gcache_get_plaintext(group->cache, rcvd->act.buf));
+        memcpy(ptr, tmp, rcvd->act.buf_len);
+        gcache_drop_plaintext(group->cache, rcvd->act.buf);
         rcvd->id = group->my_idx; // passing own index in seqno_g
     }
     else

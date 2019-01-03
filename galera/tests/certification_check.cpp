@@ -6,46 +6,13 @@
 #include "certification.hpp"
 #include "trx_handle.hpp"
 #include "key_os.hpp"
-#include "GCache.hpp"
-#include "gu_config.hpp"
+
+#include "galera_test_env.hpp"
 
 #include <check.h>
 
 namespace
 {
-    class TestEnv
-    {
-    public:
-
-        TestEnv() :
-            conf_   (),
-            init_   (conf_),
-            gcache_ (conf_, ".")
-        { }
-
-        ~TestEnv() { ::unlink(GCACHE_NAME.c_str()); }
-
-        gu::Config&         conf()   { return conf_  ; }
-        gcache::GCache&     gcache() { return gcache_; }
-    private:
-
-        static std::string const GCACHE_NAME;
-
-        gu::Config                        conf_;
-
-        struct Init
-        {
-            galera::ReplicatorSMM::InitConfig init_;
-
-            Init(gu::Config& conf) : init_(conf, NULL, NULL)
-            {
-                conf.set("gcache.name", GCACHE_NAME);
-                conf.set("gcache.size", "1M");
-            }
-        }                                 init_;
-        gcache::GCache                    gcache_;
-    };
-
     struct WSInfo
     {
         wsrep_uuid_t     uuid;
@@ -65,8 +32,6 @@ namespace
     };
 }
 
-std::string const TestEnv::GCACHE_NAME = "cert.cache";
-
 static
 void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version)
 {
@@ -75,8 +40,8 @@ void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version)
         16, "certification_mp");
     galera::TrxHandleSlave::Pool sp(
         sizeof(galera::TrxHandleSlave), 16, "certification_sp");
-    TestEnv env;
-    galera::Certification cert(env.conf(), 0);
+    TestEnv env("cert");
+    galera::Certification cert(env.conf(), env.gcache(), 0);
 
     gu::UUID uuid;
     cert.assign_initial_position(gu::GTID(uuid, 0), version);
@@ -129,7 +94,7 @@ void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version)
                           GCS_ACT_WRITESET};
         galera::TrxHandleSlavePtr ts(galera::TrxHandleSlave::New(false, sp),
                                      galera::TrxHandleSlaveDeleter());
-        fail_unless(ts->unserialize<true>(act) == size);
+        fail_unless(ts->unserialize<true>(env.gcache(), act) == size);
 
         galera::Certification::TestResult result(cert.append_trx(ts));
         fail_unless(result == wsi[i].result, "g: %lld res: %d exp: %d",

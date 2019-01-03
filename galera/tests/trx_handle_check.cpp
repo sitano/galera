@@ -1,11 +1,13 @@
 //
-// Copyright (C) 2010-2017 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 #include "trx_handle.hpp"
 #include <gu_uuid.hpp>
 
 #include <vector>
+
+#include "galera_test_env.hpp"
 
 #include <check.h>
 
@@ -159,6 +161,7 @@ END_TEST
 
 START_TEST(test_serialization)
 {
+    TestEnv env("trx_serialization");
     TrxHandleMaster::Pool lp(4096, 16, "serialization_lp");
     TrxHandleSlave::Pool  sp(sizeof(TrxHandleSlave), 16, "serialization_sp");
 
@@ -180,7 +183,7 @@ START_TEST(test_serialization)
                                TrxHandleSlaveDeleter());
         gcs_action const act =
             { 1, 2, buf.data(), int(buf.size()), GCS_ACT_WRITESET};
-        fail_unless(txs1->unserialize<true>(act) > 0);
+        fail_unless((txs1->unserialize<true,false>(env.gcache(), act)) > 0);
         fail_if(txs1->global_seqno() != act.seqno_g);
         fail_if(txs1->local_seqno()  != act.seqno_l);
     }
@@ -211,6 +214,7 @@ apply_cb(
 
 START_TEST(test_streaming)
 {
+    TestEnv env("trx_streaming");
     TrxHandleMaster::Pool lp(4096, 16, "streaming_lp");
     TrxHandleSlave::Pool  sp(sizeof(TrxHandleSlave), 16, "streaming_sp");
 
@@ -247,7 +251,7 @@ START_TEST(test_streaming)
                              TrxHandleSlaveDeleter());
         gcs_action const act =
             { 1, 2, buf.data(), int(buf.size()), GCS_ACT_WRITESET};
-        fail_unless(ts->unserialize<true>(act) > 0);
+        fail_unless((ts->unserialize<true,false>(env.gcache(), act)) > 0);
         fail_unless(ts->flags() & TrxHandle::F_BEGIN);
         fail_if(ts->flags() & TrxHandle::F_COMMIT);
         trx->add_replicated(ts);
@@ -270,7 +274,7 @@ START_TEST(test_streaming)
                              TrxHandleSlaveDeleter());
         gcs_action const act =
             { 2, 3, buf.data(), int(buf.size()), GCS_ACT_WRITESET};
-        fail_unless(ts->unserialize<true>(act) > 0);
+        fail_unless((ts->unserialize<true,false>(env.gcache(), act)) > 0);
         fail_if(ts->flags() & TrxHandle::F_BEGIN);
         fail_if(ts->flags() & TrxHandle::F_COMMIT);
         trx->add_replicated(ts);
@@ -294,7 +298,7 @@ START_TEST(test_streaming)
                              TrxHandleSlaveDeleter());
         gcs_action const act =
             { 3, 4, buf.data(), int(buf.size()), GCS_ACT_WRITESET};
-        fail_unless(ts->unserialize<true>(act) > 0);
+        fail_unless((ts->unserialize<true,false>(env.gcache(), act)) > 0);
         fail_if(ts->flags() & TrxHandle::F_BEGIN);
         fail_unless(ts->flags() & TrxHandle::F_COMMIT);
         trx->add_replicated(ts);

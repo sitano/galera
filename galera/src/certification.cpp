@@ -1,8 +1,9 @@
 //
-// Copyright (C) 2010-2018 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 #include "certification.hpp"
+#include "mapped_buffer.hpp"
 
 #include "gu_lock.hpp"
 #include "gu_throw.hpp"
@@ -148,7 +149,7 @@ check_against(const galera::KeyEntryNG*   const found,
 
     bool conflict(false);
 
-    if (gu_likely(0 != ref_trx))
+    if (0 != ref_trx)
     {
         if ((REF_KEY_TYPE == WSREP_KEY_EXCLUSIVE ||
              REF_KEY_TYPE == WSREP_KEY_UPDATE) && ref_trx)
@@ -231,7 +232,7 @@ certify_and_depend_v3to5(const galera::KeyEntryNG*   const found,
         check_against<WSREP_KEY_UPDATE>
         (found, key, key_type, trx, log_conflict, depends_seqno) ||
         (key_type >= WSREP_KEY_UPDATE &&
-         /* exclusive keys must be checked against shared */
+         /* exclusive and update keys must be checked against shared */
          (check_against<WSREP_KEY_REFERENCE>
           (found, key, key_type, trx, log_conflict, depends_seqno) ||
           check_against<WSREP_KEY_SHARED>
@@ -567,6 +568,7 @@ galera::Certification::do_test_preordered(TrxHandleSlave* trx)
 
 // Prepare a copy of TrxHandleSlave with private storage
 galera::NBOEntry copy_ts(
+    gcache::GCache& gcache,
     galera::TrxHandleSlave* ts,
     galera::TrxHandleSlave::Pool& pool,
     gu::shared_ptr<NBOCtx>::type nbo_ctx)
@@ -583,29 +585,31 @@ galera::NBOEntry copy_ts(
     }
 
     buf->resize(ts->action().second);
-    std::copy(static_cast<const gu::byte_t*>(ts->action().first),
-              static_cast<const gu::byte_t*>(ts->action().first)
+    if (buf->size() > size_t(std::numeric_limits<int32_t>::max()))
+        gu_throw_error(ERANGE) << "Buffer size " << buf->size()
+                               << " out of range";
+
+    const void* const plaintext(gcache.get_plaintext(ts->action().first));
+    std::copy(static_cast<const gu::byte_t*>(plaintext),
+              static_cast<const gu::byte_t*>(plaintext)
               + ts->action().second,
               buf->begin());
 
     galera::TrxHandleSlaveDeleter d;
     gu::shared_ptr<galera::TrxHandleSlave>::type new_ts(
         galera::TrxHandleSlave::New(ts->local(), pool), d);
-    if (buf->size() > size_t(std::numeric_limits<int32_t>::max()))
-        gu_throw_error(ERANGE) << "Buffer size " << buf->size()
-                               << " out of range";
     gcs_action act = {ts->global_seqno(), ts->local_seqno(),
                       &(*buf)[0], static_cast<int32_t>(buf->size()),
                       GCS_ACT_WRITESET};
     if (ts->certified() == false)
     {
         // TrxHandleSlave is from group
-        gu_trace(new_ts->unserialize<true>(act));
+        gu_trace((new_ts->unserialize<true,false>(gcache,act)));
     }
     else
     {
         // TrxHandleSlave is from IST
-        gu_trace(new_ts->unserialize<false>(act));
+        gu_trace((new_ts->unserialize<false,false>(gcache,act)));
     }
     new_ts->set_local(ts->local());
     return galera::NBOEntry(new_ts, buf, nbo_ctx);
@@ -842,8 +846,8 @@ galera::Certification::TestResult galera::Certification::do_test_nbo(
         log_debug << "NBO start: " << *ts;
         // We need a copy of ts since the lifetime of NBO may exceed
         // the lifetime of the buffer in GCache
-        NBOEntry entry(copy_ts(ts.get(), nbo_pool_, nbo_ctx_unlocked(
-                                   ts->global_seqno())));
+        NBOEntry entry(copy_ts(gcache_, ts.get(), nbo_pool_,
+                               nbo_ctx_unlocked(ts->global_seqno())));
 
         TrxHandleSlave* new_ts(entry.ts_ptr());
         const KeySetIn& key_set(new_ts->write_set().keyset());
@@ -932,10 +936,13 @@ galera::Certification::TestResult galera::Certification::do_test_nbo(
     return ret;
 }
 
-galera::Certification::Certification(gu::Config& conf, ServiceThd* thd)
+galera::Certification::Certification(gu::Config&     conf,
+                                     gcache::GCache& cache,
+                                     ServiceThd*     thd)
     :
     version_               (-1),
     conf_                  (conf),
+    gcache_                (cache),
     trx_map_               (),
     cert_index_ng_         (),
     nbo_map_               (),

@@ -1,65 +1,22 @@
 /*
- * Copyright (C) 2010-2017 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
  */
 #define __STDC_FORMAT_MACROS
 
 #include "../src/galera_service_thd.hpp"
-#include "../src/replicator_smm.hpp"
+
+#include "galera_test_env.hpp"
+
 #include <check.h>
 #include <errno.h>
 
 #include <inttypes.h>
 
-namespace
-{
-    class TestEnv
-    {
-        class GCache_setup
-        {
-        public:
-            GCache_setup(gu::Config& conf) : name_("service_thd_check.gcache")
-            {
-                conf.set("gcache.name", name_);
-                conf.set("gcache.size", "1M");
-                log_info << "conf for gcache: " << conf;
-            }
-
-            ~GCache_setup()
-            {
-                unlink(name_.c_str());
-            }
-        private:
-            std::string const name_;
-        };
-
-    public:
-
-        TestEnv() :
-            conf_   (),
-            init_   (conf_, NULL, NULL),
-            gcache_setup_(conf_),
-            gcache_ (conf_, "."),
-            gcs_    (conf_, gcache_)
-        {}
-
-        gcache::GCache&   gcache()  { return gcache_; }
-        galera::DummyGcs& gcs()     { return gcs_;    }
-
-    private:
-
-        gu::Config       conf_;
-        galera::ReplicatorSMM::InitConfig init_;
-        GCache_setup     gcache_setup_;
-        gcache::GCache   gcache_;
-        galera::DummyGcs gcs_;
-    };
-}
-
 using namespace galera;
 
 START_TEST(service_thd1)
 {
-    TestEnv env;
+    TestEnv env("service_thd_check");
     ServiceThd* thd = new ServiceThd(env.gcs(), env.gcache());
     fail_if (thd == 0);
     delete thd;
@@ -72,7 +29,7 @@ END_TEST
 
 START_TEST(service_thd2)
 {
-    TestEnv env;
+    TestEnv env("service_thd_check");
     DummyGcs& conn(env.gcs());
     ServiceThd* thd = new ServiceThd(conn, env.gcache());
     gu::UUID const state_uuid(NULL, 0);
@@ -119,7 +76,7 @@ END_TEST
 
 START_TEST(service_thd3)
 {
-    TestEnv env;
+    TestEnv env("service_thd_check");
     ServiceThd* thd = new ServiceThd(env.gcs(), env.gcache());
     fail_if (thd == 0);
     // so far for empty GCache the following should be a noop.

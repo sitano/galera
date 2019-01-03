@@ -685,8 +685,12 @@ namespace galera
                             wsize = msg.len() - offset;
 
                             void*   const ptr(gcache_.malloc(wsize));
+                            void*   const ptx(gcache_.get_plaintext(ptr));
                             ssize_t const r
-                                (asio::read(socket, asio::buffer(ptr, wsize)));
+                                (asio::read(socket, asio::buffer(ptx, wsize)));
+                            /* since IST events are normally processed right
+                             * away, allow plaintext to linger until the event
+                             * is done with and discarded */
 
                             if (gu_unlikely(r != wsize))
                             {
@@ -700,6 +704,7 @@ namespace galera
                         {
                             wsize = GU_WORDSIZE/8; // bits to bytes
                             wbuf  = gcache_.malloc(wsize);
+                            (void)gcache_.get_plaintext(wbuf);
                         }
 
                         gcache_.seqno_assign(wbuf, msg.seqno(), gcs_type,

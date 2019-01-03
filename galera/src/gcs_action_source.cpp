@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2010-2018 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 #include "replicator.hpp"
@@ -57,7 +57,7 @@ galera::GcsActionSource::process_writeset(void* const              recv_ctx,
     TrxHandleSlavePtr tsp(TrxHandleSlave::New(false, trx_pool_),
                           TrxHandleSlaveDeleter());
 
-    gu_trace(tsp->unserialize<true>(act));
+    gu_trace(tsp->unserialize<true>(gcache_, act));
     tsp->set_local(replicator_.source_id() == tsp->source_id());
     gu_trace(replicator_.process_trx(recv_ctx, tsp));
     exit_loop = tsp->exit_loop(); // this is the end of trx lifespan

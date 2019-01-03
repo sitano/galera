@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2010-2018 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 #include "galera_common.hpp"
@@ -130,7 +130,7 @@ galera::ReplicatorSMM::ReplicatorSMM(const struct wsrep_init_args* args)
     ist_receiver_       (config_, gcache_, slave_pool_,*this,args->node_address),
     ist_senders_        (gcache_),
     wsdb_               (),
-    cert_               (config_, &service_thd_),
+    cert_               (config_, gcache_, &service_thd_),
     pending_cert_queue_ (),
     local_monitor_      (),
     apply_monitor_      (),
@@ -696,7 +696,7 @@ wsrep_status_t galera::ReplicatorSMM::replicate(TrxHandleMaster& trx,
     TrxHandleSlavePtr ts(TrxHandleSlave::New(true, slave_pool_),
                          TrxHandleSlaveDeleter());
 
-    gu_trace(ts->unserialize<true>(act));
+    gu_trace(ts->unserialize<true>(gcache_, act));
     ts->set_local(true);
 
     ts->update_stats(keys_count_, keys_bytes_, data_bytes_, unrd_bytes_);

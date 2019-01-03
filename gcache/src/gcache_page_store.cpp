@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
  */
 
 /*! @file page store implementation */
@@ -168,6 +168,7 @@ gcache::PageStore::PageStore (const std::string& dir_name,
                               wsrep_encrypt_cb_t encrypt_cb,
                               size_t             keep_size,
                               size_t             page_size,
+                              size_t             keep_plaintext_size,
                               int                dbg,
                               bool               keep_page)
     :
@@ -177,16 +178,18 @@ gcache::PageStore::PageStore (const std::string& dir_name,
     nonce_     (),
     keep_size_ (keep_size),
     page_size_ (page_size),
-    keep_page_ (keep_page),
+    keep_plaintext_size_ (keep_plaintext_size),
+    plaintext_size_(0),
     count_     (0),
     pages_     (),
     current_   (0),
     total_size_(0),
     delete_page_attr_(),
-    debug_     (dbg & DEBUG)
 #ifndef GCACHE_DETACH_THREAD
-    , delete_thr_(pthread_t(-1))
+    delete_thr_(pthread_t(-1)),
 #endif /* GCACHE_DETACH_THREAD */
+    debug_     (dbg & DEBUG),
+    keep_page_ (keep_page)
 {
     int err = pthread_attr_init (&delete_page_attr_);
 
@@ -311,6 +314,22 @@ gcache::PageStore::realloc (void* ptr, size_type const size)
     }
 
     return ret;
+}
+
+void*
+gcache::PageStore::get_plaintext(const void* ptr)
+{
+    assert(encrypt_cb_); // must be called only if encryption callback is set
+    assert(0);
+    return NULL;
+}
+
+void
+gcache::PageStore::drop_plaintext(const void* ptr)
+{
+    assert(encrypt_cb_); // must be called only if encryption callback is set
+    assert(0);
+    (void)ptr;
 }
 
 void

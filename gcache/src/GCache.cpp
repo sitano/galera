@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2009-2019 Codership Oy <info@codership.com>
  */
 
 #include "GCache.hpp"
@@ -51,6 +51,7 @@ namespace gcache
                    encrypt_cb,
                    params.keep_pages_size(),
                    params.page_size(),
+                   params.keep_plaintext_size(),
                    params.debug(),
                    /* keep last page if PS is the only storage */
                    !((params.mem_size() + params.rb_size()) > 0)),
@@ -117,6 +118,18 @@ void* gcache_realloc (gcache_t* gc, void* ptr, int size)
 {
     gcache::GCache* gcache = reinterpret_cast<gcache::GCache*>(gc);
     return gcache->realloc (ptr, size);
+}
+
+void* gcache_get_plaintext (gcache_t* gc, const void* ptr)
+{
+    gcache::GCache* gcache = reinterpret_cast<gcache::GCache*>(gc);
+    return gcache->get_plaintext (ptr);
+}
+
+void gcache_drop_plaintext (gcache_t* gc, const void* ptr)
+{
+    gcache::GCache* gcache = reinterpret_cast<gcache::GCache*>(gc);
+    gcache->drop_plaintext (ptr);
 }
 
 int64_t gcache_seqno_min (gcache_t* gc)

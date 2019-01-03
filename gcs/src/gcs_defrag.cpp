@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2019 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -10,12 +10,19 @@
 #include <unistd.h>
 #include <string.h>
 
+#define DF_SET_HEAD(_ptr_)                                      \
+    df->head  = _ptr_;                                          \
+    df->plain = static_cast<uint8_t*>                           \
+                (gcs_gcache_get_plaintext(df->cache, df->head));\
+    df->tail  = df->plain;
+
 #define DF_ALLOC()                                              \
     do {                                                        \
-        df->head = static_cast<uint8_t*>(gcs_gcache_malloc (df->cache, df->size)); \
+        void* ptr(gcs_gcache_malloc(df->cache, df->size));      \
                                                                 \
-        if(gu_likely(df->head != NULL))                         \
-            df->tail = df->head;                                \
+        if (gu_likely(ptr != NULL)) {                           \
+            DF_SET_HEAD(ptr);                                   \
+        }                                                       \
         else {                                                  \
             gu_error ("Could not allocate memory for new "      \
                       "action of size: %zd", df->size);         \
@@ -62,7 +69,7 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
                           frg->act_id, frg->act_size);
                 df->frag_no  = 0;
                 df->received = 0;
-                df->tail     = df->head;
+                df->tail     = df->plain;
                 df->reset    = false;
 
                 if (df->size != frg->act_size) {
@@ -113,8 +120,7 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
             DF_ALLOC();
 #else
             /* we don't store actions locally at all */
-            df->head = NULL;
-            df->tail = df->head;
+            DF_SET_HEAD(NULL);
 #endif
         }
         else {
@@ -140,9 +146,6 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
         }
     }
 
-    df->received += frg->frag_len;
-    assert (df->received <= df->size);
-
 #ifndef GCS_FOR_GARB
     assert (df->tail);
     memcpy (df->tail, frg->frag, frg->frag_len);
@@ -153,28 +156,24 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
     assert (NULL == df->head);
 #endif
 
-#if 1
-    if (df->received == df->size) {
-        act->buf     = df->head;
-        act->buf_len = df->received;
-        gcs_defrag_init (df, df->cache);
-        return act->buf_len;
-    }
-    else {
-        return 0;
-    }
-#else
-    /* Refs gh185. Above original logic is preserved which relies on resetting
-     * group->frag_reset when local action needs to be resent. However a proper
-     * solution seems to be to use reset flag of own defrag channel (at least
-     * it is per channel, not global like group->frag_reset). This proper logic
-     * is shown below. Note that for it to work gcs_group_handle_act_msg()
-     * must be able to handle -ERESTART return code. */
+    df->received += frg->frag_len;
+    assert (df->received <= df->size);
+
     int ret;
 
     if (df->received == df->size) {
         act->buf     = df->head;
         act->buf_len = df->received;
+#if 1
+        ret = act->buf_len;
+#else
+        /* Refs gh185. Above original logic is preserved which relies on
+         * resetting group->frag_reset when local action needs to be resent.
+         * However a proper solution seems to be to use reset flag of own
+         * defrag channel (at least it is per channel, not global like
+         * group->frag_reset). This proper logic is shown below. Note that
+         * for it to work gcs_group_handle_act_msg() must be able to handle
+         * -ERESTART return code. */
         if (gu_likely(!df->reset))
         {
             ret = act->buf_len;
@@ -187,7 +186,9 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
             assert(local);
             ret = -ERESTART;
         }
-        gcs_defrag_init (df, df->cache); // this also clears df->reset flag
+#endif
+        gcs_gcache_drop_plaintext(df->cache, df->head);
+        gcs_defrag_init (df, df->cache);
         assert(!df->reset);
     }
     else {
@@ -195,5 +196,4 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
     }
 
     return ret;
-#endif
 }

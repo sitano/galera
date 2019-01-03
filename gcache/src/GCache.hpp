@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2009-2019 Codership Oy <info@codership.com>
  */
 
 #ifndef __GCACHE_H__
@@ -62,6 +62,27 @@ namespace gcache
         void* malloc  (ssize_type size);
         void  free    (void* ptr);
         void* realloc (void* ptr, ssize_type size);
+
+        /*!
+         * Retrieve plaintext buffer by pointer to ciphertext.
+         * Repeated calls shall return the same pointer, i.e. there is only one
+         * plaintext buffer per ciphertext.
+         * The plaintext pointer shall be valid at least until drop_plaintext()
+         * or free() is called. Subsequent call to get_plaintext() is not
+         * guranteed to return the same pointer.
+         */
+        inline void* get_plaintext(const void* cphr)
+        {
+            if (encrypt_cache)
+                return ps.get_plaintext(cphr);
+            else
+                return const_cast<void*>(cphr);
+        }
+        /* Allow to drop corresponding plaintext buffer from cache */
+        inline void  drop_plaintext(const void* cphr)
+        {
+            if (encrypt_cache) ps.drop_plaintext(cphr);
+        }
 
         /* Seqno related functions */
 
@@ -214,12 +235,14 @@ namespace gcache
             size_t rb_size()             const { return rb_size_;         }
             size_t page_size()           const { return page_size_;       }
             size_t keep_pages_size()     const { return keep_pages_size_; }
+            size_t keep_plaintext_size() const { return keep_plaintext_size_;}
             int    debug()               const { return debug_;           }
             bool   recover()             const { return recover_;         }
 
             void mem_size        (size_t s) { mem_size_        = s; }
             void page_size       (size_t s) { page_size_       = s; }
             void keep_pages_size (size_t s) { keep_pages_size_ = s; }
+            void keep_plaintext_size (size_t s) { keep_plaintext_size_ = s; }
 #ifndef NDEBUG
             void debug           (int    d) { debug_           = d; }
 #endif
@@ -232,6 +255,7 @@ namespace gcache
             size_t      const rb_size_;
             size_t            page_size_;
             size_t            keep_pages_size_;
+            size_t            keep_plaintext_size_;
             int               debug_;
             bool        const recover_;
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
  */
 
 /*! @file page store class */
@@ -24,6 +24,7 @@ namespace gcache
                    wsrep_encrypt_cb_t encrypt_cb,
                    size_t             keep_size,
                    size_t             page_size,
+                   size_t             plaintext_size,
                    int                dbg,
                    bool               keep_page);
 
@@ -40,6 +41,8 @@ namespace gcache
 
         void  free    (BufferHeader* bh) { release<false>(bh); }
 
+        void* get_plaintext(const void* ptr);
+        void  drop_plaintext(const void* ptr);
         /* page::repossess() should be called directly on page object */
         void  repossess(BufferHeader* bh) { assert(0); }
 
@@ -54,6 +57,8 @@ namespace gcache
         void  set_page_size (size_t size) { page_size_ = size; }
 
         void  set_keep_size (size_t size) { keep_size_ = size; }
+
+        void  set_plaintext_size (size_t size) { plaintext_size_ = size; }
 
         void  set_debug(int dbg);
 
@@ -72,17 +77,19 @@ namespace gcache
         Page::Nonce       nonce_;     /* current nonce */
         size_t            keep_size_; /* how much pages to keep after freeing */
         size_t            page_size_; /* min size of the individual page */
-        bool        const keep_page_; /* whether to keep the last page */
-        size_t            count_;
+        size_t            keep_plaintext_size_; /* max plaintext to keep */
+        size_t            plaintext_size_; /* how much plaintext allocated */
+        size_t            count_;     /* page counter to make unique file name */
         typedef std::deque<Page*> PageQueue;
         PageQueue         pages_;
         Page*             current_;
         size_t            total_size_;
         pthread_attr_t    delete_page_attr_;
-        int               debug_;
 #ifndef GCACHE_DETACH_THREAD
         pthread_t         delete_thr_;
 #endif /* GCACHE_DETACH_THREAD */
+        int               debug_;
+        bool        const keep_page_; /* whether to keep the last page */
 
         void new_page    (size_type size, const Page::EncKey& k);
 

@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2018 Codership Oy <info@codership.com>
+// Copyright (C) 2018-2019 Codership Oy <info@codership.com>
 //
 
 #include <wsrep_api.h>
@@ -58,6 +58,7 @@ static const char* Defaults[] =
 #endif
     "gcache.dir",                  ".",
     "gcache.keep_pages_size",      "0",
+    "gcache.keep_plaintext_size",  "128M", /* defaults to gcache.page_size */
     "gcache.mem_size",             "0",
     "gcache.name",                 "./galera.cache",
     "gcache.page_size",            "128M",
@@ -239,34 +240,34 @@ START_TEST(defaults)
 
     struct wsrep_init_args init_args =
         {
-            &ctx, // void* app_ctx
+            &ctx,     // void*       app_ctx
 
             /* Configuration parameters */
-            NULL, // const char* node_name
-            NULL, // const char* node_address
-            NULL, // const char* node_incoming
-            NULL, // const char* data_dir
-            NULL, // const char* options
-            0,    // int         proto_ver
+            NULL,     // const char* node_name
+            NULL,     // const char* node_address
+            NULL,     // const char* node_incoming
+            NULL,     // const char* data_dir
+            NULL,     // const char* options
+            0,        // int         proto_ver
 
             /* Application initial state information. */
-            NULL, // const wsrep_gtid_t* state_id
-            NULL, // const wsrep_buf_t*  state
+            NULL,     // const wsrep_gtid_t*    state_id
+            NULL,     // const wsrep_buf_t*     state
 
             /* Application callbacks */
-            log_cb, // wsrep_log_cb_t         logger_cb
-            conn_cb,// wsrep_connected_cb_t   connected_cb
-            view_cb,// wsrep_view_cb_t        view_handler_cb
-            NULL,   // wsrep_sst_request_cb_t sst_request_cb
-            NULL,   // wsrep_encrypt_cb_t     encrypt_cb
+            log_cb,   // wsrep_log_cb_t         logger_cb
+            conn_cb,  // wsrep_connected_cb_t   connected_cb
+            view_cb,  // wsrep_view_cb_t        view_handler_cb
+            NULL,     // wsrep_sst_request_cb_t sst_request_cb
+            NULL,     // wsrep_encrypt_cb_t     encrypt_cb
 
             /* Applier callbacks */
-            NULL, // wsrep_apply_cb_t      apply_cb
-            NULL, // wsrep_unordered_cb_t  unordered_cb
+            NULL,     // wsrep_apply_cb_t       apply_cb
+            NULL,     // wsrep_unordered_cb_t   unordered_cb
 
             /* State Snapshot Transfer callbacks */
-            NULL, // wsrep_sst_donate_cb_t sst_donate_cb
-            synced_cb,// wsrep_synced_cb_t synced_cb
+            NULL,     // wsrep_sst_donate_cb_t  sst_donate_cb
+            synced_cb,// wsrep_synced_cb_t      synced_cb
         };
     ret = provider.init(&provider, &init_args);
     fail_if(WSREP_OK != ret);

@@ -25,6 +25,10 @@ extern void* gcache_malloc      (gcache_t* gc, int size);
 extern void  gcache_free        (gcache_t* gc, const void* ptr);
 extern void* gcache_realloc     (gcache_t* gc, void* ptr, int size);
 
+/* use pointer to ciphertext to get/drop corresponding plaintext buffer */
+extern void* gcache_get_plaintext (gcache_t* gc, const void* ptr);
+extern void  gcache_drop_plaintext(gcache_t* gc, const void* ptr);
+
 extern int64_t gcache_seqno_min (gcache_t* gc);
 
 #ifdef __cplusplus
