@@ -3,14 +3,12 @@
 //
 
 #include "certification.hpp"
-#include "mapped_buffer.hpp"
 
 #include "gu_lock.hpp"
 #include "gu_throw.hpp"
 
 #include <map>
 #include <algorithm> // std::for_each
-
 
 using namespace galera;
 
@@ -573,9 +571,6 @@ galera::NBOEntry copy_ts(
     galera::TrxHandleSlave::Pool& pool,
     gu::shared_ptr<NBOCtx>::type nbo_ctx)
 {
-    // FIXME: Pass proper working directory from config to MappedBuffer ctor
-    gu::shared_ptr<galera::MappedBuffer>::type buf(
-        new galera::MappedBuffer("/tmp"));
     assert(ts->action().first && ts->action().second);
     if (ts->action().first == 0)
     {
@@ -584,6 +579,7 @@ galera::NBOEntry copy_ts(
             << *ts;
     }
 
+    gu::shared_ptr<NBOEntry::Buffer>::type buf(new NBOEntry::Buffer);
     buf->resize(ts->action().second);
     if (buf->size() > size_t(std::numeric_limits<int32_t>::max()))
         gu_throw_error(ERANGE) << "Buffer size " << buf->size()
