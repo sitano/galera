@@ -34,9 +34,10 @@ namespace gcache
 #endif
     }
 
-    GCache::GCache (gu::Config& cfg,
-                    const std::string& data_dir,
-                    wsrep_encrypt_cb_t const encrypt_cb)
+    GCache::GCache (gu::Config&              cfg,
+                    const std::string&       data_dir,
+                    wsrep_encrypt_cb_t const encrypt_cb,
+                    void*              const app_ctx)
         :
         config    (cfg),
         params    (config, data_dir),
@@ -49,6 +50,7 @@ namespace gcache
                    params.debug(), params.recover()),
         ps        (params.dir_name(),
                    encrypt_cb,
+                   app_ctx,
                    params.keep_pages_size(),
                    params.page_size(),
                    params.keep_plaintext_size(),

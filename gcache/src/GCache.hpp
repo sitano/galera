@@ -44,7 +44,8 @@ namespace gcache
          */
         GCache (gu::Config&        cfg,
                 const std::string& data_dir,
-                wsrep_encrypt_cb_t encrypt_cb = NULL);
+                wsrep_encrypt_cb_t encrypt_cb = NULL,
+                void*              app_ctx    = NULL);
 
         virtual ~GCache();
 

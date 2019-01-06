@@ -143,7 +143,6 @@ gcache::PageStore::new_page (size_type const size, const Page::EncKey& new_key)
     Page* const page(new Page(this,
                               make_page_name(base_name_, count_),
                               nonce_,
-                              new_key,
                               page_size_ > min_size ? page_size_ : min_size,
                               debug_));
 
@@ -153,37 +152,59 @@ gcache::PageStore::new_page (size_type const size, const Page::EncKey& new_key)
     count_++;
     nonce_ += page->size(); /* advance nonce for the next page */
 
-    // allocate, write and release key buffer
-    void* const kp(current_->malloc(key_buf_size));
-    std::vector<uint8_t> kv(key_buf_size); // plaintext key buffer
-    BufferHeader* const bh(BH_cast(kv.data()));
+    /* allocate, write and release key buffer */
+    void* const kp(current_->malloc(key_buf_size));// buffer in page (ciphertext)
+    assert(kp);
+
+    size_type const key_alloc_size(Page::aligned_size(key_buf_size));
+    assert(key_alloc_size >= sizeof(BufferHeader) + enc_key_.size());
+
+    /* choose whether to operate on a tmp plaintext buffer or directly on page */
+    BufferHeader* const bh
+        (BH_cast(encrypt_cb_ ? ::operator new(key_alloc_size) : kp));
+
     BH_clear(bh);
     bh->size = key_buf_size;
     BH_release(bh);
-    ::memcpy(kp, bh, key_buf_size);
-    current_->discard(BH_cast(kp));
+    ::memcpy(bh + 1, enc_key_.data(), enc_key_.size());
+
+    if (encrypt_cb_)
+    {
+        current_->xcrypt(encrypt_cb_, app_ctx_, new_key, bh, kp, key_alloc_size,
+                         WSREP_ENC);
+        delete bh;
+    }
+    else
+    {
+        /* nothing to do, data written directly to page */
+    }
+
+    current_->discard(bh);
 }
 
-gcache::PageStore::PageStore (const std::string& dir_name,
-                              wsrep_encrypt_cb_t encrypt_cb,
-                              size_t             keep_size,
-                              size_t             page_size,
-                              size_t             keep_plaintext_size,
-                              int                dbg,
-                              bool               keep_page)
+gcache::PageStore::PageStore (const std::string&       dir_name,
+                              wsrep_encrypt_cb_t const encrypt_cb,
+                              void*              const app_ctx,
+                              size_t             const keep_size,
+                              size_t             const page_size,
+                              size_t             const keep_plaintext_size,
+                              int                const dbg,
+                              bool               const keep_page)
     :
     base_name_ (make_base_name(dir_name)),
     encrypt_cb_(encrypt_cb),
+    app_ctx_   (app_ctx),
     enc_key_   (),
     nonce_     (),
     keep_size_ (keep_size),
     page_size_ (page_size),
     keep_plaintext_size_ (keep_plaintext_size),
-    plaintext_size_(0),
     count_     (0),
     pages_     (),
     current_   (0),
     total_size_(0),
+    enc2plain_ (),
+    plaintext_size_(0),
     delete_page_attr_(),
 #ifndef GCACHE_DETACH_THREAD
     delete_thr_(pthread_t(-1)),
@@ -267,19 +288,52 @@ gcache::PageStore::malloc (size_type const size)
 {
     Limits::assert_size(size);
 
+    void* ptr(NULL);
+    if (gu_likely(NULL != current_)) ptr = current_->malloc(size);
+    if (gu_unlikely(NULL == ptr)) ptr = malloc_new(size);
+
     BufferHeader* bh(NULL);
 
-    if (gu_likely(NULL != current_)) bh = BH_cast(current_->malloc(size));
-    if (gu_unlikely(NULL == bh)) bh = BH_cast(malloc_new(size));
-    if (gu_likely(NULL != bh))
+    if (gu_likely(NULL != ptr))
     {
+        if (!encrypt_cb_)
+        {
+            bh = BH_cast(ptr);
+        }
+        else /* allocate corresponding plaintext buffer */
+        {
+            size_type const alloc_size(Page::aligned_size(size));
+            bh = BH_cast(::operator new(alloc_size));
+
+            Plain plain = {
+                current_,    // page_
+                bh,          // bh_
+                alloc_size,  // alloc_size_
+                true,        // changed_ (malloc() intention is writing)
+                false        // dropped_
+            };
+
+            if (gu_unlikely(!enc2plain_.insert(PlainMapEntry(ptr,plain)).second))
+            {
+                delete bh;
+                gu_throw_fatal << "Failed to insert plaintext ctx. Map size: "
+                               << enc2plain_.size();
+            }
+
+            plaintext_size_ += alloc_size;
+        }
+
         bh->size    = size;
         bh->seqno_g = SEQNO_NONE;
         bh->ctx     = reinterpret_cast<BH_ctx_t>(current_);
         bh->flags   = 0;
         bh->store   = BUFFER_IN_PAGE;
 
-        bh += 1; // point to payload
+        // @todo perhaps BufferHeader should be flushed to page at this point
+        //       for recovery (to store an offset on the next buffer) but likely
+        //       this may be postponed till the plaintext is dropped...
+
+        bh = BH_cast(ptr) + 1; // point to payload
     }
 
     return bh;

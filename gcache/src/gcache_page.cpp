@@ -94,16 +94,14 @@ gcache::Page::drop_fs_cache() const
 gcache::Page::Page (void*              ps,
                     const std::string& name,
                     const Nonce&       nonce,
-                    const EncKey&      key,
                     size_t size,
                     int dbg)
     :
     fd_   (name, aligned_size(size), false, false),
     mmap_ (fd_),
-    key_  (key),
     nonce_(nonce),
     ps_   (ps),
-    next_ (static_cast<uint8_t*>(mmap_.ptr)),
+    next_ (start()),
     space_(mmap_.size),
     used_ (0),
     debug_(dbg)
@@ -137,7 +135,7 @@ gcache::Page::malloc (size_type size)
         used_++;
 
 #ifndef NDEBUG
-        assert (next_ <= static_cast<uint8_t*>(mmap_.ptr) + mmap_.size);
+        assert (next_ <= start() + mmap_.size);
         if (debug_)
         {
             log_info << name() << " allocd " << size << '/' << alloc_size;
@@ -161,6 +159,40 @@ gcache::Page::realloc (void* ptr, size_type size)
     assert(0); // all logic must go to PageStore.
     return NULL;
 }
+
+void
+gcache::Page::xcrypt(wsrep_encrypt_cb_t    const encrypt_cb,
+                     void*                 const app_ctx,
+                     const EncKey&               key,
+                     const void*           const from,
+                     void*                 const to,
+                     size_type             const size,
+                     wsrep_enc_direction_t const dir)
+{
+    assert(encrypt_cb);
+    assert(app_ctx);
+
+    size_t const offset(dir == WSREP_ENC ?
+                        /* writing to page */
+                        static_cast<uint8_t*>(to) - start() :
+                        /* reading from page */
+                        static_cast<const uint8_t*>(from) - start());
+    Nonce const nonce(nonce_ + offset);
+    wsrep_enc_key_t const enc_key = { key.data(), key.size() };
+    wsrep_enc_ctx_t       enc_ctx = { &enc_key, nonce.iv(), NULL };
+    wsrep_buf_t     const input   = { from, size };
+
+    wsrep_cb_status const ret
+        (encrypt_cb(app_ctx, &enc_ctx, &input, to, dir, true));
+
+    if (gu_unlikely(ret != WSREP_CB_SUCCESS))
+    {
+        gu_throw_fatal << "Encryption callback failed. Page: " << *this
+                       << ", offset: " << offset << ", size: " << size
+                       << ", direction: " << dir;
+    }
+}
+
 
 void gcache::Page::print(std::ostream& os) const
 {

@@ -13,6 +13,7 @@
 
 #include <string>
 #include <deque>
+#include <map>
 
 namespace gcache
 {
@@ -22,6 +23,7 @@ namespace gcache
 
         PageStore (const std::string& dir_name,
                    wsrep_encrypt_cb_t encrypt_cb,
+                   void*              app_ctx,
                    size_t             keep_size,
                    size_t             page_size,
                    size_t             plaintext_size,
@@ -69,21 +71,35 @@ namespace gcache
 
     private:
 
+        struct Plain
+        {
+            Page*         page_;       /* page containing ciphertext */
+            BufferHeader* bh_;         /* corresponding plaintext buffer */
+            size_type     alloc_size_; /* total allocated size */
+            bool          changed_;    /* whether we need to flush it to disk */
+            bool          dropped_;
+        };
+
+        typedef std::pair<void*, Plain> PlainMapEntry;
+
         static int  const DEBUG = 4; // debug flag
 
         std::string const base_name_; /* /.../.../gcache.page. */
-        wsrep_encrypt_cb_t encrypt_cb_;
+        wsrep_encrypt_cb_t const encrypt_cb_;
+        void* const       app_ctx_;   /* context for encryption callback */
         Page::EncKey      enc_key_;   /* current key */
         Page::Nonce       nonce_;     /* current nonce */
         size_t            keep_size_; /* how much pages to keep after freeing */
         size_t            page_size_; /* min size of the individual page */
         size_t            keep_plaintext_size_; /* max plaintext to keep */
-        size_t            plaintext_size_; /* how much plaintext allocated */
         size_t            count_;     /* page counter to make unique file name */
         typedef std::deque<Page*> PageQueue;
         PageQueue         pages_;
         Page*             current_;
         size_t            total_size_;
+        typedef std::map<void*, Plain> PlainMap;
+        PlainMap          enc2plain_;
+        size_t            plaintext_size_; /* how much plaintext allocated */
         pthread_attr_t    delete_page_attr_;
 #ifndef GCACHE_DETACH_THREAD
         pthread_t         delete_thr_;

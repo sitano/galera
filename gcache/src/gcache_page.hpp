@@ -55,7 +55,6 @@ namespace gcache
         Page (void*              ps,
               const std::string& name,
               const Nonce&       nonce,
-              const EncKey&      key,
               size_t             size,
               int                dbg);
 
@@ -110,6 +109,14 @@ namespace gcache
             used_--;
         }
 
+        void xcrypt(wsrep_encrypt_cb_t    encrypt_cb,
+                    void*                 app_ctx,
+                    const Page::EncKey&   key,
+                    const void*           from,
+                    void*                 to,
+                    size_type             size,
+                    wsrep_enc_direction_t dir);
+
         size_t used () const { return used_; }
 
         size_t size() const { return fd_.size(); } /* size on storage */
@@ -146,7 +153,6 @@ namespace gcache
 
         gu::FileDescriptor fd_;
         gu::MMap           mmap_;
-        EncKey             key_;
         Nonce              nonce_;
         void*              ps_;
         uint8_t*           next_;
@@ -163,6 +169,12 @@ namespace gcache
             return BH_cast(reinterpret_cast<uint8_t*>(bh) +
                            aligned_size(bh->size));
         }
+
+        inline uint8_t*
+        start() { return static_cast<uint8_t*>(mmap_.ptr); }
+
+        inline const uint8_t*
+        start() const { return static_cast<const uint8_t*>(mmap_.ptr); }
 
         void close(); /* close page for allocation */
 
