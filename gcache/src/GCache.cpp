@@ -104,10 +104,16 @@ void gcache_destroy (gcache_t* gc)
     delete gcache;
 }
 
-void* gcache_malloc  (gcache_t* gc, int size)
+void* gcache_malloc  (gcache_t* gc, int size, void** ptx)
 {
     gcache::GCache* gcache = reinterpret_cast<gcache::GCache*>(gc);
-    return gcache->malloc (size);
+    return gcache->malloc (size, *ptx);
+}
+
+void* gcache_realloc (gcache_t* gc, void* ptr, int size, void** ptx)
+{
+    gcache::GCache* gcache = reinterpret_cast<gcache::GCache*>(gc);
+    return gcache->realloc (ptr, size, *ptx);
 }
 
 void  gcache_free    (gcache_t* gc, const void* ptr)
@@ -116,13 +122,7 @@ void  gcache_free    (gcache_t* gc, const void* ptr)
     gcache->free (const_cast<void*>(ptr));
 }
 
-void* gcache_realloc (gcache_t* gc, void* ptr, int size)
-{
-    gcache::GCache* gcache = reinterpret_cast<gcache::GCache*>(gc);
-    return gcache->realloc (ptr, size);
-}
-
-void* gcache_get_plaintext (gcache_t* gc, const void* ptr)
+const void* gcache_get_plaintext (gcache_t* gc, const void* ptr)
 {
     gcache::GCache* gcache = reinterpret_cast<gcache::GCache*>(gc);
     return gcache->get_plaintext (ptr);

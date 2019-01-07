@@ -24,7 +24,7 @@ typedef struct gcs_defrag
     gcache_t*      cache;
     gcs_seqno_t    sent_id; // sent id (unique for a node)
     void*          head;    // head of action buffer
-    uint8_t*       plain;   // plaintext buffer
+    void*          plain;   // plaintext buffer
     uint8_t*       tail;    // tail of action data
     size_t         size;
     size_t         received;

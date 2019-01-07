@@ -38,10 +38,12 @@ START_TEST(test1)
     fail_if(ps.total_pages() != 0,"expected 0 pages, got %zu",ps.total_pages());
     fail_if(ps.total_size()  != 0,"expected size 0, got %zu", ps.total_size());
 
+    void* ptx;
     size_t size(3 + bh_size);
-    void* buf = ps.malloc (size);
+    void* buf(ps.malloc(size, ptx));
 
-    fail_if(0 == buf);
+    fail_if(NULL == buf);
+    fail_if(NULL == ptx);
     fail_if(ps.count()       != 1,"expected count 1, got %zu",ps.count());
     fail_if(ps.total_pages() != 1,"expected 1 pages, got %zu",ps.total_pages());
 
@@ -53,17 +55,18 @@ START_TEST(test1)
     fail_if(ps.total_pages() != 1,"expected 1 pages, got %zu",ps.total_pages());
 
     size += gcache::Page::ALIGNMENT;
-    tmp = ps.realloc (buf, size); // here new page should be allocated
+    // the following should fail as new page needs to be allocated
+    tmp = ps.realloc (buf, size);
 
-    fail_if(0   == tmp);
+    fail_if(0   != tmp);
     fail_if(buf == tmp);
-    fail_if(ps.count()       != 2,"expected count 2, got %zu",ps.count());
+    fail_if(ps.count()       != 1,"expected count 1, got %zu",ps.count());
     fail_if(ps.total_pages() != 1,"expected 1 pages, got %zu",ps.total_pages());
 
-    ps_free(tmp);
-    ps.discard (ptr2BH(tmp));
+    ps_free(buf);
+    ps.discard (ptr2BH(buf));
 
-    fail_if(ps.count()       != 2,"expected count 2, got %zu",ps.count());
+    fail_if(ps.count()       != 1,"expected count 1, got %zu",ps.count());
     fail_if(ps.total_pages() != 0,"expected 0 pages, got %zu",ps.total_pages());
     fail_if(ps.total_size()  != 0,"expected size 0, got %zu", ps.total_size());
 }
@@ -88,9 +91,11 @@ START_TEST(test2)
 
     mark_point();
 
-    uint8_t* buf = static_cast<uint8_t*>(ps.malloc (page_size));
+    void* ptx;
+    uint8_t* buf = static_cast<uint8_t*>(ps.malloc(page_size, ptx));
 
     fail_if (0 == buf);
+    fail_if (0 == ptx);
 
     while (--page_size)
     {
@@ -127,10 +132,11 @@ START_TEST(test3) // check that all page size is efficiently used
     /* exactly half of the payload */
     assert(ptr_size == gcache::Page::aligned_size(ptr_size));
 
-    void* ptr1 = ps.malloc (ptr_size);
+    void* ptx;
+    void* ptr1 = ps.malloc(ptr_size, ptx);
     fail_if (0 == ptr1);
 
-    void* ptr2 = ps.malloc (ptr_size);
+    void* ptr2 = ps.malloc(ptr_size, ptx);
     fail_if (0 == ptr2);
 
     fail_if (ps.count() != 1, "ps.count() = %zd, expected 1", ps.count());
@@ -167,25 +173,30 @@ START_TEST(test4) // check that pages linger correctly and get deleted as they
     fail_if(ps.count() != 0);
     fail_if(ps.total_pages() != 0);
 
-    void* ptr1(ps.malloc(alloc_size));
+    void* ptx;
+    void* ptr1(ps.malloc(alloc_size, ptx));
+    fail_if(NULL == ptx);
     fail_if(NULL == ptr1);
     expect = 1;
     fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
             expect, ps.total_pages());
 
-    void* ptr2(ps.malloc(alloc_size));
+    void* ptr2(ps.malloc(alloc_size, ptx));
+    fail_if(NULL == ptx);
     fail_if(NULL == ptr2);
     expect = 2;
     fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
             expect, ps.total_pages());
 
-    void* ptr3(ps.malloc(alloc_size));
+    void* ptr3(ps.malloc(alloc_size, ptx));
+    fail_if(NULL == ptx);
     fail_if(NULL == ptr3);
     expect = 3;
     fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
             expect, ps.total_pages());
 
-    void* ptr4(ps.malloc(alloc_size));
+    void* ptr4(ps.malloc(alloc_size, ptx));
+    fail_if(NULL == ptx);
     fail_if(NULL == ptr4);
     expect = 4;
     fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
@@ -203,7 +214,8 @@ START_TEST(test4) // check that pages linger correctly and get deleted as they
     fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
             expect, ps.total_pages());
 
-    void* ptr5(ps.malloc(alloc_size));
+    void* ptr5(ps.malloc(alloc_size, ptx));
+    fail_if(NULL == ptx);
     fail_if(NULL == ptr5);
     expect = 3;
     fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
@@ -221,7 +233,8 @@ START_TEST(test4) // check that pages linger correctly and get deleted as they
     fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
             expect, ps.total_pages());
 
-    void* ptr6(ps.malloc(alloc_size));
+    void* ptr6(ps.malloc(alloc_size, ptx));
+    fail_if(NULL == ptx);
     fail_if(NULL == ptr6);
     expect = 4; // page 3 is still locked
     fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
@@ -233,7 +246,8 @@ START_TEST(test4) // check that pages linger correctly and get deleted as they
     fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
             expect, ps.total_pages());
 
-    void* ptr7(ps.malloc(alloc_size));
+    void* ptr7(ps.malloc(alloc_size, ptx));
+    fail_if(NULL == ptx);
     fail_if(NULL == ptr7);
     expect = 5;
     fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",

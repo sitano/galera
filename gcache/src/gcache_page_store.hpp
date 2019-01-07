@@ -37,14 +37,18 @@ namespace gcache
             return static_cast<PageStore*>(p->parent());
         }
 
-        void* malloc  (size_type size);
+        /* This is just to satisfy the MemOps interface. Should not be called */
+        void* malloc  (size_type size) { assert(0); return NULL; }
+
+        void* malloc  (size_type size, void*& ptx);
 
         void* realloc (void* ptr, size_type size);
 
         void  free    (BufferHeader* bh) { release<false>(bh); }
 
-        void* get_plaintext(const void* ptr);
-        void  drop_plaintext(const void* ptr);
+        const void* get_plaintext(const void* ptr);
+        void        drop_plaintext(const void* ptr);
+
         /* page::repossess() should be called directly on page object */
         void  repossess(BufferHeader* bh) { assert(0); }
 
@@ -77,10 +81,10 @@ namespace gcache
             BufferHeader* bh_;         /* corresponding plaintext buffer */
             size_type     alloc_size_; /* total allocated size */
             bool          changed_;    /* whether we need to flush it to disk */
-            bool          dropped_;
+            bool          freed_;      /* free() was called on the buffer */
         };
 
-        typedef std::pair<void*, Plain> PlainMapEntry;
+        typedef std::pair<const void*, Plain> PlainMapEntry;
 
         static int  const DEBUG = 4; // debug flag
 
@@ -97,7 +101,7 @@ namespace gcache
         PageQueue         pages_;
         Page*             current_;
         size_t            total_size_;
-        typedef std::map<void*, Plain> PlainMap;
+        typedef std::map<const void*, Plain> PlainMap;
         PlainMap          enc2plain_;
         size_t            plaintext_size_; /* how much plaintext allocated */
         pthread_attr_t    delete_page_attr_;

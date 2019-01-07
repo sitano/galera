@@ -93,12 +93,14 @@ gcache::Page::drop_fs_cache() const
 
 gcache::Page::Page (void*              ps,
                     const std::string& name,
+                    const EncKey&      key,
                     const Nonce&       nonce,
                     size_t size,
                     int dbg)
     :
     fd_   (name, aligned_size(size), false, false),
     mmap_ (fd_),
+    key_  (key),
     nonce_(nonce),
     ps_   (ps),
     next_ (start()),
@@ -160,10 +162,36 @@ gcache::Page::realloc (void* ptr, size_type size)
     return NULL;
 }
 
+bool
+gcache::Page::realloc (void*     const ptr,
+                       size_type const old_size,
+                       size_type const new_size)
+{
+    assert(uintptr_t(ptr) % ALIGNMENT == 0);
+
+    uint8_t* p(static_cast<uint8_t*>(ptr));
+    assert(p > start());
+    assert(p < next_);
+
+    if (p + old_size == next_)
+    {
+        /* last buffer can shrink/expand */
+        diff_type const diff_size(new_size - old_size);
+        assert(diff_size % ALIGNMENT == 0);
+
+        if (diff_size < 0 || size_t(diff_size) < space_)
+        {
+            space_ -= diff_size;
+            next_  += diff_size;
+            return true;
+        }
+    }
+    return false;
+}
+
 void
 gcache::Page::xcrypt(wsrep_encrypt_cb_t    const encrypt_cb,
                      void*                 const app_ctx,
-                     const EncKey&               key,
                      const void*           const from,
                      void*                 const to,
                      size_type             const size,
@@ -178,7 +206,7 @@ gcache::Page::xcrypt(wsrep_encrypt_cb_t    const encrypt_cb,
                         /* reading from page */
                         static_cast<const uint8_t*>(from) - start());
     Nonce const nonce(nonce_ + offset);
-    wsrep_enc_key_t const enc_key = { key.data(), key.size() };
+    wsrep_enc_key_t const enc_key = { key_.data(), key_.size() };
     wsrep_enc_ctx_t       enc_ctx = { &enc_key, nonce.iv(), NULL };
     wsrep_buf_t     const input   = { from, size };
 

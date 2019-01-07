@@ -10,24 +10,17 @@
 #include <unistd.h>
 #include <string.h>
 
-#define DF_SET_HEAD(_ptr_)                                      \
-    df->head  = _ptr_;                                          \
-    df->plain = static_cast<uint8_t*>                           \
-                (gcs_gcache_get_plaintext(df->cache, df->head));\
-    df->tail  = df->plain;
-
 #define DF_ALLOC()                                              \
     do {                                                        \
-        void* ptr(gcs_gcache_malloc(df->cache, df->size));      \
+        df->head = gcs_gcache_malloc(df->cache, df->size, &df->plain);  \
                                                                 \
-        if (gu_likely(ptr != NULL)) {                           \
-            DF_SET_HEAD(ptr);                                   \
-        }                                                       \
-        else {                                                  \
+        if (gu_unlikely(NULL == df->head)) {                    \
             gu_error ("Could not allocate memory for new "      \
                       "action of size: %zd", df->size);         \
             return -ENOMEM;                                     \
         }                                                       \
+        assert(df->plain);                                      \
+        df->tail = static_cast<uint8_t*>(df->plain);            \
     } while (0)
 
 /*!
@@ -69,7 +62,7 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
                           frg->act_id, frg->act_size);
                 df->frag_no  = 0;
                 df->received = 0;
-                df->tail     = df->plain;
+                df->tail     = static_cast<uint8_t*>(df->plain);
                 df->reset    = false;
 
                 if (df->size != frg->act_size) {
@@ -81,7 +74,7 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
                         gcache_free (df->cache, df->head);
                     }
                     else {
-                        free ((void*)df->head);
+                        free (df->head);
                     }
 
                     DF_ALLOC();
@@ -120,7 +113,7 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
             DF_ALLOC();
 #else
             /* we don't store actions locally at all */
-            DF_SET_HEAD(NULL);
+            df->plain = df->head = df->tail = NULL;
 #endif
         }
         else {
@@ -187,6 +180,8 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
             ret = -ERESTART;
         }
 #endif
+        /* after this action can spend some time in a slave queue, so let drop
+         * plaintext if the queue happens to be too long */
         gcs_gcache_drop_plaintext(df->cache, df->head);
         gcs_defrag_init (df, df->cache);
         assert(!df->reset);

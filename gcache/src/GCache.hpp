@@ -58,11 +58,26 @@ namespace gcache
         /* Sets encryption key */
         void set_enc_key(const wsrep_enc_key_t& key);
 
-        /* Memory allocation functions */
+        /*!
+         * Memory allocation methods
+         *
+         * malloc() and realloc() allocate space in the cache and return
+         * pointers to it. That return value identifies the allocated resource
+         * and should be used as an argument to free() to release it, similar
+         * to standard libc malloc(), realloc() and free().
+         * If cache is encrypted, a corresponding "shadow" plaintext buffer
+         * pointer is passed in the ptx argument, otherwise contents of ptx is
+         * identical to the return value.
+         * In other words, the return value should be used to identify cache
+         * resource, whereas the value passed in ptx should be used to read/
+         * write to it.
+         * Wherever the following methods below take void* as an argument,
+         * it is meant to be a return value of malloc()/realloc(), NOT ptx.
+         */
         typedef MemOps::ssize_type ssize_type;
-        void* malloc  (ssize_type size);
+        void* malloc  (ssize_type size, void*& ptx);
+        void* realloc (void* ptr, ssize_type size, void*& ptx);
         void  free    (void* ptr);
-        void* realloc (void* ptr, ssize_type size);
 
         /*!
          * Retrieve plaintext buffer by pointer to ciphertext.
@@ -72,17 +87,28 @@ namespace gcache
          * or free() is called. Subsequent call to get_plaintext() is not
          * guranteed to return the same pointer.
          */
-        inline void* get_plaintext(const void* cphr)
+        inline const void* get_plaintext(const void* cphr)
         {
             if (encrypt_cache)
+            {
+                gu::Lock lock(mtx);
                 return ps.get_plaintext(cphr);
+            }
             else
-                return const_cast<void*>(cphr);
+                return (cphr);
         }
-        /* Allow to drop corresponding plaintext buffer from cache */
+
+        /*!
+         * Allow to drop the plaintext buffer identified by ciphertext pointer
+         * from cache
+         */
         inline void  drop_plaintext(const void* cphr)
         {
-            if (encrypt_cache) ps.drop_plaintext(cphr);
+            if (encrypt_cache)
+            {
+                gu::Lock lock(mtx);
+                ps.drop_plaintext(cphr);
+            }
         }
 
         /* Seqno related functions */

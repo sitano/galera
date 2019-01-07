@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2019 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -99,7 +99,8 @@ START_TEST (gcs_defrag_test)
     fail_if (ret != 0);
     fail_if (defrag.head == NULL);
     fail_if (defrag.received != frag1_len);
-    fail_if (defrag.tail != defrag.plain + defrag.received);
+    fail_if (defrag.tail !=
+             static_cast<uint8_t*>(defrag.plain) + defrag.received);
     tail = defrag.tail;
 
 #define TRY_WRONG_2ND_FRAGMENT(frag)                                    \
@@ -122,7 +123,8 @@ START_TEST (gcs_defrag_test)
     ret = gcs_defrag_handle_frag (&defrag, &frg2, &recv_act, FALSE);
     fail_if (ret != 0);
     fail_if (defrag.received != frag1_len + frag2_len);
-    fail_if (defrag.tail != defrag.plain + defrag.received);
+    fail_if (defrag.tail !=
+             static_cast<uint8_t*>(defrag.plain) + defrag.received);
 
     // 7. Try third fragment, last one
     ret = gcs_defrag_handle_frag (&defrag, &frg3, &recv_act, FALSE);

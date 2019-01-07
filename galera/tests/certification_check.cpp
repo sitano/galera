@@ -83,7 +83,8 @@ void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version)
         trx->finalize(wsi[i].last_seen_seqno);
 
         // serialize write set into gcache buffer
-        gu::byte_t* buf(static_cast<gu::byte_t*>(env.gcache().malloc(size)));
+        void* ptx;
+        void* buf(env.gcache().malloc(size,ptx));
         fail_unless(out.serialize(buf, size) == size);
 
 
@@ -94,6 +95,8 @@ void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version)
                           GCS_ACT_WRITESET};
         galera::TrxHandleSlavePtr ts(galera::TrxHandleSlave::New(false, sp),
                                      galera::TrxHandleSlaveDeleter());
+        /* even though ptx was not flushed to buf yet, unserialize() should
+         * pick it from gcache */
         fail_unless(ts->unserialize<true>(env.gcache(), act) == size);
 
         galera::Certification::TestResult result(cert.append_trx(ts));

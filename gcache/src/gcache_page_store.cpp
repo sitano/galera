@@ -142,6 +142,7 @@ gcache::PageStore::new_page (size_type const size, const Page::EncKey& new_key)
 
     Page* const page(new Page(this,
                               make_page_name(base_name_, count_),
+                              new_key,
                               nonce_,
                               page_size_ > min_size ? page_size_ : min_size,
                               debug_));
@@ -170,7 +171,7 @@ gcache::PageStore::new_page (size_type const size, const Page::EncKey& new_key)
 
     if (encrypt_cb_)
     {
-        current_->xcrypt(encrypt_cb_, app_ctx_, new_key, bh, kp, key_alloc_size,
+        current_->xcrypt(encrypt_cb_, app_ctx_, bh, kp, key_alloc_size,
                          WSREP_ENC);
         delete bh;
     }
@@ -284,7 +285,7 @@ gcache::PageStore::malloc_new (size_type const size)
 }
 
 void*
-gcache::PageStore::malloc (size_type const size)
+gcache::PageStore::malloc (size_type const size, void*& ptx)
 {
     Limits::assert_size(size);
 
@@ -329,12 +330,15 @@ gcache::PageStore::malloc (size_type const size)
         bh->flags   = 0;
         bh->store   = BUFFER_IN_PAGE;
 
+        ptx = bh + 1;
+
         // @todo perhaps BufferHeader should be flushed to page at this point
         //       for recovery (to store an offset on the next buffer) but likely
         //       this may be postponed till the plaintext is dropped...
 
         bh = BH_cast(ptr) + 1; // point to payload
     }
+    else ptx = NULL;
 
     return bh;
 }
@@ -344,46 +348,97 @@ gcache::PageStore::realloc (void* ptr, size_type const size)
 {
     Limits::assert_size(size);
 
+    assert(!encrypt_cb_); // should not be called when encryption is on
+
+    /*!
+     * @note FFR: One of the reasons in-place realloc is not supported when
+     * encryption is enabled is the need to realloc plaintext buffer as well
+     * which adds too much complexity for a functionality which is not even
+     * being used ATM.
+     */
+
     assert(ptr != NULL);
 
     BufferHeader* const bh(ptr2BH(ptr));
     assert(SEQNO_NONE == bh->seqno_g);
+    assert(BUFFER_IN_PAGE == bh->store);
 
-    size_type allocd_size(Page::aligned_size(bh->size));
-    if (size <= allocd_size)
+    size_type const old_size(Page::aligned_size(bh->size));
+    size_type const new_size(Page::aligned_size(size));
+    Page*     const page(reinterpret_cast<Page*>(bh->ctx));
+
+    /* we can do in-place realloc (whether it is shrinking or growing)
+     * only if this is the last allocated buffer in the page */
+    if (old_size == new_size ||
+        page->realloc(bh, old_size, new_size))
     {
         bh->size = size;
         return ptr;
     }
 
-    void* ret(malloc(size));
-
-    if (gu_likely(0 != ret))
-    {
-        assert(size > bh->size);
-        size_type const ptr_size(bh->size - sizeof(BufferHeader));
-        ::memcpy (ret, ptr, ptr_size);
-        BH_release(bh);
-        release<true>(bh);
-    }
-
-    return ret;
+    return NULL; // fallback to malloc()/memcpy()/free()
 }
 
-void*
+const void*
 gcache::PageStore::get_plaintext(const void* ptr)
 {
     assert(encrypt_cb_); // must be called only if encryption callback is set
-    assert(0);
-    return NULL;
+
+    PlainMap::iterator i(enc2plain_.find(ptr));
+    if (enc2plain_.end() == i)
+    {
+        assert(0); // this should not happen unless ptr was discarded
+        return NULL;
+    }
+
+    Plain& p(i->second);
+    assert(p.page_);
+
+    if (NULL == p.bh_)
+    {
+        /* plaintext was flushed to page, reread it back */
+        assert(false == p.changed_);
+        p.bh_ = BH_cast(::operator new(p.alloc_size_));
+        plaintext_size_ += p.alloc_size_;
+        p.page_->xcrypt(encrypt_cb_, app_ctx_, ptr2BH(ptr), p.bh_, p.alloc_size_,
+                        WSREP_DEC);
+    }
+
+    return p.bh_ + 1;
 }
 
 void
 gcache::PageStore::drop_plaintext(const void* ptr)
 {
     assert(encrypt_cb_); // must be called only if encryption callback is set
-    assert(0);
-    (void)ptr;
+
+    PlainMap::iterator i(enc2plain_.find(ptr));
+    if (enc2plain_.end() == i)
+    {
+        assert(0); // this sohuld not happen unless ptr was discarded
+        return;
+    }
+
+    Plain& p(i->second);
+    assert(p.page_);
+    assert(p.bh_);
+
+    /* Do anything only if there's too much plaintext or it was already freed,
+     * otherwise free() should take care of it. */
+    if (plaintext_size_ > keep_plaintext_size_ || p.freed_)
+    {
+        if (p.changed_)
+        {
+            /* flush to page before freeing */
+            p.page_->xcrypt(encrypt_cb_, app_ctx_, p.bh_, ptr2BH(ptr),
+                            p.alloc_size_, WSREP_ENC);
+            p.changed_ = false;
+        }
+
+        delete p.bh_;
+        p.bh_ = NULL;
+        plaintext_size_ -= p.alloc_size_;
+    }
 }
 
 void

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2016 Codership Oy <info@codership.com>
+ * Copyright (C) 2011-2019 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -299,9 +299,11 @@ group_sst_start (struct group* group, int const src_idx, const char* donor)
     int i;
     for (i = 0; i < group->nodes_num; i++)
     {
-        char* req_buf = (char*)group->nodes[i]->group.gcache()->malloc(req_len);
+        void* req_ptx;
+        void* req_buf = group->nodes[i]->group.gcache()->malloc(req_len,req_ptx);
         fail_if (NULL == req_buf);
-        sprintf (req_buf, "%s", donor);
+        fail_if (NULL == req_ptx);
+        sprintf (static_cast<char*>(req_ptx), "%s", donor);
 
         struct gcs_act_rcvd req(
             gcs_act(req_buf, req_len, GCS_ACT_STATE_REQ),

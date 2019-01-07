@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2009-2019 Codership Oy <info@codership.com>
  */
 
 #include "GCache.hpp"
@@ -145,7 +145,7 @@ namespace gcache
     }
 
     void*
-    GCache::malloc (ssize_type const s)
+    GCache::malloc (ssize_type const s, void*& ptx)
     {
         assert(s >= 0);
 
@@ -168,19 +168,24 @@ namespace gcache
             {
                 ptr = mem.malloc(size);
 
-                if (0 == ptr) ptr = rb.malloc(size);
+                if (NULL == ptr)
+                {
+                    ptr = rb.malloc(size);
+                    if (NULL == ptr) ptr = ps.malloc(size, ptx);
+                }
 
-                if (0 == ptr) ptr = ps.malloc(size);
+                ptx = ptr;
             }
             else /* only page store can be used */
             {
-                ptr = ps.malloc(size);
+                ptr = ps.malloc(size, ptx);
             }
 
 #ifndef NDEBUG
             if (0 != ptr) buf_tracker.insert (ptr);
 #endif
         }
+        else ptx = NULL;
 
         assert((uintptr_t(ptr) % MemOps::ALIGNMENT) == 0);
 
@@ -242,8 +247,8 @@ namespace gcache
     {
         if (gu_likely(0 != ptr))
         {
-            BufferHeader* const bh(ptr2BH(ptr));
-            gu::Lock      lock(mtx);
+            BufferHeader* const bh(ptr2BH(get_plaintext(ptr)));
+            gu::Lock lock(mtx);
 
 #ifndef NDEBUG
             if (params.debug()) { log_info << "GCache::free() " << bh; }
@@ -257,40 +262,36 @@ namespace gcache
     }
 
     void*
-    GCache::realloc (void* const ptr, ssize_type const s)
+    GCache::realloc (void* const ptr, ssize_type const s, void*& ptx)
     {
         assert(s >= 0);
+        assert(!encrypt_cache); // not supported for now
 
         if (NULL == ptr)
         {
-            return malloc(s);
+            return malloc(s, ptx);
         }
         else if (s == 0)
         {
             free (ptr);
+            ptx = NULL;
             return NULL;
         }
 
         assert((uintptr_t(ptr) % MemOps::ALIGNMENT) == 0);
 
-        size_type const size(BH_size(s));
-
-        void*               new_ptr(NULL);
-        BufferHeader* const bh(ptr2BH(ptr));
+        BufferHeader* const bh(ptr2BH(get_plaintext(ptr)));
 
         if (gu_unlikely(bh->seqno_g > 0)) // sanity check
         {
-            log_fatal << "Internal program error: changing size of an ordered"
-                      << " buffer, seqno: " << bh->seqno_g << ". Aborting.";
+            log_fatal << "Internal program error: changing size of an "
+                "ordered buffer, seqno: " << bh->seqno_g << ". Aborting.";
             abort();
         }
 
-        gu::Lock      lock(mtx);
+        size_type const size(BH_size(s));
 
-        reallocs++;
-
-        MemOps* store(0);
-
+        MemOps* store(NULL);
         switch (bh->store)
         {
         case BUFFER_IN_MEM:  store = &mem; break;
@@ -301,22 +302,45 @@ namespace gcache
                       << bh->store;
             abort();
         }
+        assert(store);
 
-        new_ptr = store->realloc (ptr, size);
+        void*    new_ptr(NULL);
+        gu::Lock lock(mtx);
 
-        if (0 == new_ptr)
+        reallocs++;
+
+        if (!encrypt_cache)
         {
-            new_ptr = malloc (size);
+            /* with non-encrypted cache we may try in-store realloc() */
+            new_ptr = store->realloc(ptr, size);
+            ptx = new_ptr;
+        }
+        else
+        {
+            assert(&ps == store);
+        }
 
-            if (0 != new_ptr)
+        if (NULL == new_ptr)
+        {
+            /* if in-store realloc() failed or cache is encrypted, we need
+             * to resort to malloc() + memcpy() + free() */
+            new_ptr = malloc(size, ptx);
+
+            if (NULL != new_ptr)
             {
-                memcpy (new_ptr, ptr, bh->size - sizeof(BufferHeader));
-                store->free (bh);
+                assert(NULL != ptx);
+                /* bh points to old PLAINTEXT, ptx - to new */
+                ::memcpy(ptx, bh + 1, bh->size - sizeof(BufferHeader));
+                store->free(bh);
+            }
+            else
+            {
+                assert(NULL == ptx);
             }
         }
 
 #ifndef NDEBUG
-        if (ptr != new_ptr && 0 != new_ptr)
+        if (ptr != new_ptr && NULL != new_ptr)
         {
             std::set<const void*>::iterator it = buf_tracker.find(ptr);
 

@@ -347,17 +347,18 @@ static void store_trx(gcache::GCache* const gcache,
         ssize_t trx_size(trx->gather(bufs));
         mark_point();
         trx->finalize(last_seen);
-        ptr = static_cast<gu::byte_t*>(gcache->malloc(trx_size));
+        void* ptx;
+        ptr = static_cast<gu::byte_t*>(gcache->malloc(trx_size, ptx));
 
         /* concatenate buffer vector */
-        gu::byte_t* p(ptr);
+        gu::byte_t* p(static_cast<gu::byte_t*>(ptx));
         for (size_t k(0); k < bufs->size(); ++k)
         {
             ::memcpy(p, bufs[k].ptr, bufs[k].size); p += bufs[k].size;
         }
-        assert ((p - ptr) == trx_size);
+        assert ((p - static_cast<gu::byte_t*>(ptx)) == trx_size);
 
-        gu::Buf ws_buf = { ptr, trx_size };
+        gu::Buf ws_buf = { ptx, trx_size };
         mark_point();
         galera::WriteSetIn wsi(ws_buf);
         assert (wsi.last_seen() == last_seen);
@@ -385,11 +386,12 @@ static void store_cc(gcache::GCache* const gcache,
     cc.conf_id = conf_id++;
 
     void* tmp;
+    void* ptx;
     int   const cc_size(cc.write(&tmp));
-    void* const cc_ptr(gcache->malloc(cc_size));
+    void* const cc_ptr(gcache->malloc(cc_size, ptx));
 
     fail_if(NULL == cc_ptr);
-    memcpy(cc_ptr, tmp, cc_size);
+    memcpy(ptx, tmp, cc_size);
 
     gcache->seqno_assign(cc_ptr, i, GCS_ACT_CCHANGE, i > 0);
 }

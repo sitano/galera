@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2016 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2019 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -1682,7 +1682,8 @@ gcs_group_handle_state_request (gcs_group_t*         group,
                                 struct gcs_act_rcvd* act)
 {
     // pass only to sender and to one potential donor
-    const char* const donor_name    = (const char*)act->act.buf;
+    const char* const donor_name    =
+        (const char*)gcs_gcache_get_plaintext(group->cache, act->act.buf);
     size_t const     donor_name_len = strlen(donor_name) + 1;
     int              donor_idx      = -1;
     int const        joiner_idx     = act->sender_idx;
@@ -1842,11 +1843,12 @@ gcs_group_act_conf (gcs_group_t*         group,
     rcvd->act.buf_len = conf.write(&tmp); // throws when fails
 #ifndef GCS_FOR_GARB
     /* copy CC event to gcache for IST */
-    rcvd->act.buf = gcache_malloc(group->cache, rcvd->act.buf_len);
+    void* ptx;
+    rcvd->act.buf = gcache_malloc(group->cache, rcvd->act.buf_len, &ptx);
     if (rcvd->act.buf)
     {
-        void* const ptr(gcache_get_plaintext(group->cache, rcvd->act.buf));
-        memcpy(ptr, tmp, rcvd->act.buf_len);
+        assert(ptx);
+        memcpy(ptx, tmp, rcvd->act.buf_len);
         gcache_drop_plaintext(group->cache, rcvd->act.buf);
         rcvd->id = group->my_idx; // passing own index in seqno_g
     }

@@ -54,6 +54,7 @@ namespace gcache
 
         Page (void*              ps,
               const std::string& name,
+              const EncKey&      key,
               const Nonce&       nonce,
               size_t             size,
               int                dbg);
@@ -62,7 +63,10 @@ namespace gcache
 
         void* malloc  (size_type size);
 
+        /* should not be used */
         void* realloc (void* ptr, size_type size);
+        /* returns true in case of success */
+        bool  realloc (void* ptr, size_type old_size, size_type new_size);
 
         void  free    (BufferHeader* bh)
         {
@@ -111,7 +115,6 @@ namespace gcache
 
         void xcrypt(wsrep_encrypt_cb_t    encrypt_cb,
                     void*                 app_ctx,
-                    const Page::EncKey&   key,
                     const void*           from,
                     void*                 to,
                     size_type             size,
@@ -153,7 +156,8 @@ namespace gcache
 
         gu::FileDescriptor fd_;
         gu::MMap           mmap_;
-        Nonce              nonce_;
+        EncKey const       key_;
+        Nonce const        nonce_;
         void*              ps_;
         uint8_t*           next_;
         size_t             space_;

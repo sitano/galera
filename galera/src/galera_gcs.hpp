@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2010-2014 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 #ifndef GALERA_GCS_HPP
@@ -309,13 +309,13 @@ namespace galera
             if (gu_likely(0 != gcache_ && ret > 0))
             {
                 assert (ret == act.size);
-                gu::byte_t* ptr(
-                    reinterpret_cast<gu::byte_t*>(gcache_->malloc(act.size)));
-                act.buf = ptr;
+                void* ptx;
+                act.buf = gcache_->malloc(act.size, ptx);
                 ssize_t copied(0);
                 for (int i(0); copied < act.size; ++i)
                 {
-                    memcpy (ptr + copied, actv[i].ptr, actv[i].size);
+                    ::memcpy(static_cast<gu::byte_t*>(ptx) + copied,
+                             actv[i].ptr, actv[i].size);
                     copied += actv[i].size;
                 }
                 assert (copied == act.size);
@@ -331,8 +331,9 @@ namespace galera
             if (gu_likely(0 != gcache_ && ret > 0))
             {
                 assert (ret == act.size);
-                void* const ptr(gcache_->malloc(act.size));
-                memcpy (ptr, act.buf, act.size);
+                void* ptx;
+                void* const ptr(gcache_->malloc(act.size, ptx));
+                memcpy (ptx, act.buf, act.size);
                 act.buf = ptr;
                 // no freeing here - initial act.buf belongs to the caller
             }
