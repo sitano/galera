@@ -11,9 +11,13 @@
 #include "gcache_page.hpp"
 #include "gcache_seqno.hpp"
 
+#include <gu_macros.hpp> // GU_COMPILE_ASSERT
+
 #include <string>
 #include <deque>
 #include <map>
+#include <type_traits> // std::is_standard_layout
+#include <cstddef> // offsetof
 
 namespace gcache
 {
@@ -39,20 +43,37 @@ namespace gcache
 
         /* This is just to satisfy the MemOps interface. Should not be called */
         void* malloc  (size_type size) { assert(0); return NULL; }
-
         void* malloc  (size_type size, void*& ptx);
 
         void* realloc (void* ptr, size_type size);
 
-        void  free    (BufferHeader* bh) { release<false>(bh); }
+        void  free    (BufferHeader* bh, const void* ptr)
+        {
+            release<false>(bh, ptr);
+        }
+        void  free    (BufferHeader* bh) { free(bh, NULL); }
 
         const void* get_plaintext(const void* ptr);
-        void        drop_plaintext(const void* ptr);
+        void        drop_plaintext(const void* ptr)
+        {
+            drop_plaintext(find_plaintext(ptr), ptr, false);
+        }
 
-        /* page::repossess() should be called directly on page object */
-        void  repossess(BufferHeader* bh) { assert(0); }
+        BufferHeader* get_BH(const void* const ptr, bool change = false)
+        {
+            assert(encrypt_cb_);
+            Plain& p(find_plaintext(ptr)->second);
+            p.changed_ = p.changed_ || change;
+            return &(p.bh_);
+        }
 
-        void  discard (BufferHeader* bh) { release<true>(bh); }
+        void  repossess(BufferHeader* bh);
+
+        void  discard (BufferHeader* bh, const void* ptr)
+        {
+            release<true>(bh, ptr);
+        }
+        void  discard (BufferHeader* bh) { discard(bh, NULL); }
 
         bool  page_cleanup_needed() const { return total_size_ > keep_size_; }
 
@@ -78,8 +99,10 @@ namespace gcache
         struct Plain
         {
             Page*         page_;       /* page containing ciphertext */
-            BufferHeader* bh_;         /* corresponding plaintext buffer */
+            BufferHeader* ptx_;        /* corresponding plaintext buffer */
+            BufferHeader  bh_;         /* plaintex copy of buffer header */
             size_type     alloc_size_; /* total allocated size */
+            int           ref_count_;  /* reference counter */
             bool          changed_;    /* whether we need to flush it to disk */
             bool          freed_;      /* free() was called on the buffer */
         };
@@ -121,16 +144,57 @@ namespace gcache
 
         void* malloc_new (size_type size);
 
+        PlainMap::iterator find_plaintext(const void* ptr);
+
+        /* shared functionality for public drop_palintext() and free() */
+        void drop_plaintext(PlainMap::iterator i, const void* ptr, bool free);
+
+        void discard_plaintext(PlainMap::iterator i)
+        {
+#ifndef NDEBUG
+            Plain& p(i->second);
+            assert(p.freed_);
+            assert(0     == p.ref_count_);
+            assert(false == p.changed_);
+            assert(NULL  == p.ptx_);
+#endif
+            enc2plain_.erase(i);
+        }
+
         template <bool discard> void
-        release(BufferHeader* bh)
+        release(BufferHeader* bh, const void* ptr)
         {
             assert(BH_is_released(bh));
+            assert(ptr || !encrypt_cb_);
 
             Page* page(static_cast<Page*>(BH_ctx(bh)));
 
-            discard ? page->discard(bh) : page->free(bh);
+            if (discard)
+            {
+                page->discard(bh);
+                if (encrypt_cb_) discard_plaintext(find_plaintext(ptr));
+            }
+            else
+            {
+                bool const dis(page->free(bh, ptr));
+
+                if (encrypt_cb_)
+                {
+                    PlainMap::iterator const i(find_plaintext(ptr));
+                    drop_plaintext(i, ptr, true);
+                    if (dis) discard_plaintext(i);
+                }
+            }
 
             if (0 == page->used()) cleanup();
+        }
+
+        Plain& bh2Plain(BufferHeader* bh)
+        {
+            GU_COMPILE_ASSERT(std::is_standard_layout<Plain>::value,
+                              Plain_is_not_standard_layout);
+            return *(reinterpret_cast<Plain*>(reinterpret_cast<char*>(bh) -
+                                              offsetof(Plain, bh_)));
         }
 
         void initialize_nonce();

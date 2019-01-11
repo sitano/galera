@@ -210,12 +210,14 @@ gcache::Page::xcrypt(wsrep_encrypt_cb_t    const encrypt_cb,
     wsrep_enc_ctx_t       enc_ctx = { &enc_key, nonce.iv(), NULL };
     wsrep_buf_t     const input   = { from, size };
 
-    wsrep_cb_status const ret
+    int const ret
         (encrypt_cb(app_ctx, &enc_ctx, &input, to, dir, true));
 
-    if (gu_unlikely(ret != WSREP_CB_SUCCESS))
+    if (gu_unlikely(ret != int(input.len)))
     {
-        gu_throw_fatal << "Encryption callback failed. Page: " << *this
+        assert(0);
+        gu_throw_fatal << "Encryption callback failed with return value " << ret
+                       <<". Page: " << *this
                        << ", offset: " << offset << ", size: " << size
                        << ", direction: " << dir;
     }

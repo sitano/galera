@@ -1,5 +1,5 @@
  /*
- * Copyright (C) 2009-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2009-2019 Codership Oy <info@codership.com>
  */
 
 #include "gcache_bh.hpp"
@@ -59,7 +59,7 @@ namespace gcache
     {
         gu::Lock lock(mtx);
 
-        BufferHeader* bh = ptr2BH(ptr);
+        BufferHeader* bh = get_BH(ptr, true);
 
         assert (SEQNO_NONE == bh->seqno_g);
         assert (seqno_g > 0);
@@ -67,7 +67,7 @@ namespace gcache
 
         if (gu_likely(seqno_g > seqno_max))
         {
-            seqno2ptr.insert (seqno2ptr.end(), seqno2ptr_pair_t(seqno_g, ptr));
+            seqno2ptr.insert(seqno2ptr.end(), seqno2ptr_pair_t(seqno_g, ptr));
             seqno_max = seqno_g;
         }
         else
@@ -201,10 +201,10 @@ namespace gcache
                          << batch_size << ", end: " << end;
             }
 #endif
-            for (;(loop = (it != seqno2ptr.end())) && it->first <= end;)
+            for (;(loop = (it != seqno2ptr.end())) && it->first <= end; ++it)
             {
                 assert(it->first != SEQNO_NONE);
-                BufferHeader* const bh(ptr2BH(it->second));
+                BufferHeader* const bh(get_BH(it->second));
                 assert (bh->seqno_g == it->first);
 #ifndef NDEBUG
                 if (!(seqno_released < it->first ||
@@ -220,9 +220,7 @@ namespace gcache
                            seqno_released == SEQNO_NONE);
                 }
 #endif
-                ++it; /* free_common() below may erase current element,
-                       * so advance iterator before calling free_common()*/
-                if (gu_likely(!BH_is_released(bh))) free_common(bh);
+                if (gu_likely(!BH_is_released(bh))) free_common(bh, it->second);
             }
 
             assert (loop || seqno == seqno_released);
@@ -282,7 +280,7 @@ namespace gcache
 
         assert (ptr);
 
-        BufferHeader* const bh(ptr2BH(ptr));
+        BufferHeader* const bh(get_BH(ptr));
         assert(seqno_g == bh->seqno_g);
 
         if (BH_is_released(bh)) // repossess and revert the effects of free()
@@ -298,8 +296,7 @@ namespace gcache
             {
             case BUFFER_IN_MEM:  mem.repossess(bh); break;
             case BUFFER_IN_RB:   rb.repossess (bh); break;
-            case BUFFER_IN_PAGE:
-                reinterpret_cast<MemOps*>(bh->ctx)->repossess(bh); break;
+            case BUFFER_IN_PAGE: ps.repossess (bh); break;
             default: assert(0);
             }
 

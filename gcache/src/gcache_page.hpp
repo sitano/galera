@@ -68,12 +68,17 @@ namespace gcache
         /* returns true in case of success */
         bool  realloc (void* ptr, size_type old_size, size_type new_size);
 
-        void  free    (BufferHeader* bh)
+        bool  free    (BufferHeader* bh, const void* ptr)
         {
-            assert(bh >= mmap_.ptr);
-            assert(static_cast<void*>(bh) <= // checks that bh is within page
-                   (static_cast<uint8_t*>(mmap_.ptr) + mmap_.size -
-                    sizeof(BufferHeader)));
+            if (ptr)
+            {
+                assert(ptr2BH(ptr) >= mmap_.ptr);
+                assert(static_cast<void*>(ptr2BH(ptr)) <=
+                       // checks that bh is within page
+                       (static_cast<uint8_t*>(mmap_.ptr) + mmap_.size -
+                        sizeof(BufferHeader)));
+            }
+
             assert(bh->size >= sizeof(BufferHeader));
             assert(bh->store == BUFFER_IN_PAGE);
             assert(bh->ctx == reinterpret_cast<BH_ctx_t>(this));
@@ -82,25 +87,28 @@ namespace gcache
 #ifndef NDEBUG
             if (debug_) { log_info << name() << " freed " << bh; }
 #endif
-            if (bh->seqno_g <= 0) // ordered buffers get dicarded in discard()
+            if (bh->seqno_g <= 0) // ordered buffers get discarded in discard()
             {
                 used_--;
+                return true;
             }
+            return false;
         }
+
+        void  free    (BufferHeader* bh) { free(bh, NULL); }
 
         void  repossess(BufferHeader* bh)
         {
             assert(bh >= mmap_.ptr);
             assert(BH_next(bh) <= BH_cast(next_));
             assert(bh->size >= sizeof(BufferHeader));
-            assert(bh->seqno_g != SEQNO_NONE);
+            assert(bh->seqno_g >= 0);
             assert(bh->store == BUFFER_IN_PAGE);
             assert(bh->ctx == reinterpret_cast<BH_ctx_t>(this));
             assert(BH_is_released(bh)); // will be marked unreleased by caller
 #ifndef NDEBUG
             if (debug_) { log_info << name() << " repossessed " << bh; }
 #endif
-            used_++;
         }
 
         void discard (BufferHeader* bh)

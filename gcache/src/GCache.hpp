@@ -243,7 +243,7 @@ namespace gcache
 
         typedef MemOps::size_type size_type;
 
-        void free_common (BufferHeader*);
+        void free_common (BufferHeader*, const void*);
 
         gu::Config&     config;
 
@@ -312,7 +312,13 @@ namespace gcache
         std::set<const void*> buf_tracker;
 #endif
 
-        void discard_buffer (BufferHeader* bh);
+        /* change == true will mark plaintext as changed */
+        BufferHeader* get_BH(const void* ptr, bool change = false)
+        {
+            return encrypt_cache ? ps.get_BH(ptr, change) : ptr2BH(ptr);
+        }
+
+        void discard_buffer (BufferHeader* bh, const void* ptr);
 
         /* discard buffers while condition.check() is true */
         template <typename T>

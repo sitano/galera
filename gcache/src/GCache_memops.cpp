@@ -9,7 +9,7 @@
 namespace gcache
 {
     void
-    GCache::discard_buffer (BufferHeader* bh)
+    GCache::discard_buffer(BufferHeader* bh, const void* ptr)
     {
         assert(bh->seqno_g > 0);
         bh->seqno_g = SEQNO_ILL; // will never be reused
@@ -18,7 +18,7 @@ namespace gcache
         {
         case BUFFER_IN_MEM:  mem.discard (bh); break;
         case BUFFER_IN_RB:   rb.discard  (bh); break;
-        case BUFFER_IN_PAGE: ps.discard  (bh); break;
+        case BUFFER_IN_PAGE: ps.discard  (bh, ptr); break;
         default:
             log_fatal << "Corrupt buffer header: " << bh;
             abort();
@@ -36,7 +36,8 @@ namespace gcache
         for (seqno2ptr_t::iterator i = seqno2ptr.begin();
              i != seqno2ptr.end() && cond.check();)
         {
-            BufferHeader* bh(ptr2BH (i->second));
+            const void* const ptr(i->second);
+            BufferHeader* const bh(get_BH(ptr));
 
             if (gu_likely(BH_is_released(bh)))
             {
@@ -44,7 +45,7 @@ namespace gcache
 
                 cond.update(bh);
                 seqno2ptr.erase (i++); // post ++ is significant!
-                discard_buffer(bh);
+                discard_buffer(bh, ptr);
             }
             else
             {
@@ -133,14 +134,15 @@ namespace gcache
         while ((r = seqno2ptr.rbegin()) != seqno2ptr.rend() &&
                r->first > seqno)
         {
-            BufferHeader* bh(ptr2BH(r->second));
+            const void* const ptr(r->second);
+            BufferHeader* const bh(get_BH(ptr));
 
             assert(BH_is_released(bh));
             assert(bh->seqno_g == r->first);
             assert(bh->seqno_g > seqno);
 
             seqno2ptr.erase(--(seqno2ptr.end()));
-            discard_buffer(bh);
+            discard_buffer(bh, ptr);
         }
     }
 
@@ -193,7 +195,7 @@ namespace gcache
     }
 
     void
-    GCache::free_common (BufferHeader* const bh)
+    GCache::free_common (BufferHeader* const bh, const void* const ptr)
     {
         assert(bh->seqno_g != SEQNO_ILL);
         BH_release(bh);
@@ -213,7 +215,6 @@ namespace gcache
             seqno_released = bh->seqno_g;
         }
 #ifndef NDEBUG
-        void* const ptr(bh + 1);
         std::set<const void*>::iterator it = buf_tracker.find(ptr);
         if (it == buf_tracker.end())
         {
@@ -228,7 +229,7 @@ namespace gcache
         {
         case BUFFER_IN_MEM:  mem.free (bh); break;
         case BUFFER_IN_RB:   rb.free  (bh); break;
-        case BUFFER_IN_PAGE: ps.free  (bh); break;
+        case BUFFER_IN_PAGE: ps.free  (bh, ptr); break;
         }
 
         rb.assert_size_free();
@@ -247,13 +248,13 @@ namespace gcache
     {
         if (gu_likely(0 != ptr))
         {
-            BufferHeader* const bh(ptr2BH(get_plaintext(ptr)));
             gu::Lock lock(mtx);
-
+            BufferHeader* const bh(get_BH(ptr));
 #ifndef NDEBUG
+            assert(bh->store == BUFFER_IN_PAGE || !encrypt_cache);
             if (params.debug()) { log_info << "GCache::free() " << bh; }
 #endif
-            free_common (bh);
+            free_common (bh, ptr);
         }
         else {
             log_warn << "Attempt to free a null pointer";
@@ -265,7 +266,6 @@ namespace gcache
     GCache::realloc (void* const ptr, ssize_type const s, void*& ptx)
     {
         assert(s >= 0);
-        assert(!encrypt_cache); // not supported for now
 
         if (NULL == ptr)
         {
@@ -305,13 +305,13 @@ namespace gcache
         assert(store);
 
         void*    new_ptr(NULL);
-        gu::Lock lock(mtx);
 
         reallocs++;
 
         if (!encrypt_cache)
         {
             /* with non-encrypted cache we may try in-store realloc() */
+            gu::Lock lock(mtx);
             new_ptr = store->realloc(ptr, size);
             ptx = new_ptr;
         }
@@ -331,6 +331,7 @@ namespace gcache
                 assert(NULL != ptx);
                 /* bh points to old PLAINTEXT, ptx - to new */
                 ::memcpy(ptx, bh + 1, bh->size - sizeof(BufferHeader));
+                gu::Lock lock(mtx);
                 store->free(bh);
             }
             else
@@ -342,6 +343,7 @@ namespace gcache
 #ifndef NDEBUG
         if (ptr != new_ptr && NULL != new_ptr)
         {
+            gu::Lock lock(mtx);
             std::set<const void*>::iterator it = buf_tracker.find(ptr);
 
             if (it != buf_tracker.end()) buf_tracker.erase(it);

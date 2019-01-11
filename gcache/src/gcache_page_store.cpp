@@ -173,7 +173,7 @@ gcache::PageStore::new_page (size_type const size, const Page::EncKey& new_key)
     {
         current_->xcrypt(encrypt_cb_, app_ctx_, bh, kp, key_alloc_size,
                          WSREP_ENC);
-        delete bh;
+        ::operator delete(bh);
     }
     else
     {
@@ -297,21 +297,35 @@ gcache::PageStore::malloc (size_type const size, void*& ptx)
 
     if (gu_likely(NULL != ptr))
     {
-        if (!encrypt_cb_)
+        size_type alloc_size;
+        if (encrypt_cb_) /* allocate corresponding plaintext buffer */
+        {
+            alloc_size = Page::aligned_size(size);
+            bh = BH_cast(::operator new(alloc_size));
+        }
+        else             /* use mmapped buffer directly */
         {
             bh = BH_cast(ptr);
         }
-        else /* allocate corresponding plaintext buffer */
-        {
-            size_type const alloc_size(Page::aligned_size(size));
-            bh = BH_cast(::operator new(alloc_size));
 
+        bh->size    = size;
+        bh->seqno_g = SEQNO_NONE;
+        bh->ctx     = reinterpret_cast<BH_ctx_t>(current_);
+        bh->flags   = 0;
+        bh->store   = BUFFER_IN_PAGE;
+
+        ptx = bh + 1;    /* this points to plaintext */
+
+        if (encrypt_cb_)
+        {
             Plain plain = {
                 current_,    // page_
-                bh,          // bh_
+                bh,          // ptx_
+                *bh,         // bh_
                 alloc_size,  // alloc_size_
+                1,           // ref_count_
                 true,        // changed_ (malloc() intention is writing)
-                false        // dropped_
+                false        // freed_
             };
 
             if (gu_unlikely(!enc2plain_.insert(PlainMapEntry(ptr,plain)).second))
@@ -324,19 +338,7 @@ gcache::PageStore::malloc (size_type const size, void*& ptx)
             plaintext_size_ += alloc_size;
         }
 
-        bh->size    = size;
-        bh->seqno_g = SEQNO_NONE;
-        bh->ctx     = reinterpret_cast<BH_ctx_t>(current_);
-        bh->flags   = 0;
-        bh->store   = BUFFER_IN_PAGE;
-
-        ptx = bh + 1;
-
-        // @todo perhaps BufferHeader should be flushed to page at this point
-        //       for recovery (to store an offset on the next buffer) but likely
-        //       this may be postponed till the plaintext is dropped...
-
-        bh = BH_cast(ptr) + 1; // point to payload
+        bh = BH_cast(ptr) + 1; // point to mmapped payload
     }
     else ptx = NULL;
 
@@ -379,36 +381,8 @@ gcache::PageStore::realloc (void* ptr, size_type const size)
     return NULL; // fallback to malloc()/memcpy()/free()
 }
 
-const void*
-gcache::PageStore::get_plaintext(const void* ptr)
-{
-    assert(encrypt_cb_); // must be called only if encryption callback is set
-
-    PlainMap::iterator i(enc2plain_.find(ptr));
-    if (enc2plain_.end() == i)
-    {
-        assert(0); // this should not happen unless ptr was discarded
-        return NULL;
-    }
-
-    Plain& p(i->second);
-    assert(p.page_);
-
-    if (NULL == p.bh_)
-    {
-        /* plaintext was flushed to page, reread it back */
-        assert(false == p.changed_);
-        p.bh_ = BH_cast(::operator new(p.alloc_size_));
-        plaintext_size_ += p.alloc_size_;
-        p.page_->xcrypt(encrypt_cb_, app_ctx_, ptr2BH(ptr), p.bh_, p.alloc_size_,
-                        WSREP_DEC);
-    }
-
-    return p.bh_ + 1;
-}
-
-void
-gcache::PageStore::drop_plaintext(const void* ptr)
+gcache::PageStore::PlainMap::iterator
+gcache::PageStore::find_plaintext(const void* const ptr)
 {
     assert(encrypt_cb_); // must be called only if encryption callback is set
 
@@ -416,29 +390,91 @@ gcache::PageStore::drop_plaintext(const void* ptr)
     if (enc2plain_.end() == i)
     {
         assert(0); // this sohuld not happen unless ptr was discarded
-        return;
+        gu_throw_fatal << "Internal program error: plaintext context not found.";
     }
+    return i;
+}
+
+const void*
+gcache::PageStore::get_plaintext(const void* ptr)
+{
+    assert(encrypt_cb_); // must be called only if encryption callback is set
+
+    PlainMap::iterator const i(find_plaintext(ptr));
+    assert(i->first == ptr);
 
     Plain& p(i->second);
     assert(p.page_);
-    assert(p.bh_);
+
+    if (NULL == p.ptx_)
+    {
+        /* plaintext was flushed to page, reread it back */
+        assert(false == p.changed_);
+        p.ptx_ = BH_cast(::operator new(p.alloc_size_));
+        plaintext_size_ += p.alloc_size_;
+        p.page_->xcrypt(encrypt_cb_, app_ctx_, ptr2BH(ptr), p.ptx_,p.alloc_size_,
+                        WSREP_DEC);
+
+        assert(0 == ::memcmp(p.ptx_, &p.bh_, sizeof(p.bh_)));
+    }
+
+    p.ref_count_++;
+
+    return p.ptx_ + 1;
+}
+
+void
+gcache::PageStore::drop_plaintext(PlainMap::iterator const i,
+                                  const void*        const ptr,
+                                  bool               const free)
+{
+    assert(i->first == ptr);
+
+    Plain& p(i->second);
+    assert(p.page_);
+    assert(p.ptx_);
+
+    assert(p.ref_count_ > 0);
+    p.ref_count_--;
+
+    assert(false == p.freed_ || false == free); /* can free only once */
+    p.freed_ = p.freed_ || free;
 
     /* Do anything only if there's too much plaintext or it was already freed,
      * otherwise free() should take care of it. */
-    if (plaintext_size_ > keep_plaintext_size_ || p.freed_)
+    if (p.ref_count_ == 0 &&
+        (plaintext_size_ > keep_plaintext_size_ || p.freed_))
     {
         if (p.changed_)
         {
+            /* update buffer header in ptx_ */
+            *p.ptx_ = p.bh_;
+
             /* flush to page before freeing */
-            p.page_->xcrypt(encrypt_cb_, app_ctx_, p.bh_, ptr2BH(ptr),
+            p.page_->xcrypt(encrypt_cb_, app_ctx_, p.ptx_, ptr2BH(ptr),
                             p.alloc_size_, WSREP_ENC);
             p.changed_ = false;
         }
 
-        delete p.bh_;
-        p.bh_ = NULL;
+        delete p.ptx_;
+        p.ptx_ = NULL;
         plaintext_size_ -= p.alloc_size_;
     }
+}
+
+void
+gcache::PageStore::repossess(BufferHeader* bh)
+{
+    assert(BH_is_released(bh)); // will be changed by the caller
+
+    Plain& p(bh2Plain(bh));
+    assert(p.freed_);
+
+    p.freed_ = false;
+    /* don't increment reference counter or decrypt ciphertext - this method
+       is not to acquire resource, it is to reverse the effects of free() */
+
+    p.page_->repossess(bh);
 }
 
 void
