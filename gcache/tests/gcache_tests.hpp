@@ -1,4 +1,4 @@
-// Copyright (C) 2010-2011 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 
 // $Id$
 
@@ -8,6 +8,7 @@
 #ifndef __gcache_tests_hpp__
 #define __gcache_tests_hpp__
 
+#include "gcache_enc_test.hpp"
 #include "gcache_mem_test.hpp"
 #include "gcache_rb_test.hpp"
 #include "gcache_page_test.hpp"
@@ -20,6 +21,7 @@ typedef Suite *(*suite_creator_t)(void);
 
 static suite_creator_t suites[] =
 {
+    gcache_enc_suite,
     gcache_mem_suite,
     gcache_rb_suite,
     gcache_page_suite,
