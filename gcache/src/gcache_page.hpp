@@ -90,6 +90,10 @@ namespace gcache
             if (bh->seqno_g <= 0) // ordered buffers get discarded in discard()
             {
                 used_--;
+#ifndef NDEBUG
+                if (debug_) { log_info << name() << " decremented ref count to "
+                                       << used_; }
+#endif
                 return true;
             }
             return false;
@@ -118,7 +122,14 @@ namespace gcache
             if (debug_) { log_info << name() << " discarded " << bh; }
 #endif
             assert(used_ > 0);
-            used_--;
+            if (bh->seqno_g > 0)
+            {
+                used_--;
+#ifndef NDEBUG
+                if (debug_) { log_info << name() << " decremented ref count to "
+                                       << used_; }
+#endif
+            }
         }
 
         void xcrypt(wsrep_encrypt_cb_t    encrypt_cb,

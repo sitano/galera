@@ -141,6 +141,7 @@ gcache::Page::malloc (size_type size)
         if (debug_)
         {
             log_info << name() << " allocd " << size << '/' << alloc_size;
+            log_info << name() << " incremented ref count to " << used_;
         }
 #endif
         return ret;
@@ -198,7 +199,6 @@ gcache::Page::xcrypt(wsrep_encrypt_cb_t    const encrypt_cb,
                      wsrep_enc_direction_t const dir)
 {
     assert(encrypt_cb);
-    assert(app_ctx);
 
     size_t const offset(dir == WSREP_ENC ?
                         /* writing to page */

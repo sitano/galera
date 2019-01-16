@@ -25,6 +25,8 @@ namespace gcache
     {
     public:
 
+        static int  const DEBUG = 4; // debug flag
+
         PageStore (const std::string& dir_name,
                    wsrep_encrypt_cb_t encrypt_cb,
                    void*              app_ctx,
@@ -105,11 +107,15 @@ namespace gcache
             int           ref_count_;  /* reference counter */
             bool          changed_;    /* whether we need to flush it to disk */
             bool          freed_;      /* free() was called on the buffer */
+
+            void print(std::ostream& os) const;
+
+            friend std::ostream&
+            operator << (std::ostream& os, const Plain& p)
+            { p.print(os); return os; }
         };
 
         typedef std::pair<const void*, Plain> PlainMapEntry;
-
-        static int  const DEBUG = 4; // debug flag
 
         std::string const base_name_; /* /.../.../gcache.page. */
         wsrep_encrypt_cb_t const encrypt_cb_;

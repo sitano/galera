@@ -154,6 +154,7 @@ gcache::PageStore::new_page (size_type const size, const Page::EncKey& new_key)
     nonce_ += page->size(); /* advance nonce for the next page */
 
     /* allocate, write and release key buffer */
+
     void* const kp(current_->malloc(key_buf_size));// buffer in page (ciphertext)
     assert(kp);
 
@@ -165,22 +166,28 @@ gcache::PageStore::new_page (size_type const size, const Page::EncKey& new_key)
         (BH_cast(encrypt_cb_ ? ::operator new(key_alloc_size) : kp));
 
     BH_clear(bh);
-    bh->size = key_buf_size;
+    bh->size    = key_buf_size;
+    bh->seqno_g = SEQNO_NONE;
+    bh->ctx     = reinterpret_cast<BH_ctx_t>(current_);
+    bh->flags   = 0;
+    bh->store   = BUFFER_IN_PAGE;
     BH_release(bh);
+
     ::memcpy(bh + 1, enc_key_.data(), enc_key_.size());
 
     if (encrypt_cb_)
     {
         current_->xcrypt(encrypt_cb_, app_ctx_, bh, kp, key_alloc_size,
                          WSREP_ENC);
-        ::operator delete(bh);
     }
     else
     {
         /* nothing to do, data written directly to page */
     }
 
-    current_->discard(bh);
+    current_->free(bh); /* we won't need the buffer until recovery */
+
+    if (encrypt_cb_) ::operator delete(bh);
 }
 
 gcache::PageStore::PageStore (const std::string&       dir_name,
@@ -233,8 +240,63 @@ gcache::PageStore::PageStore (const std::string&       dir_name,
 #endif /* GCACHE_DETACH_THREAD */
 }
 
+void
+gcache::PageStore::Plain::print(std::ostream& os) const
+{
+    os << "Page: "      << page_
+       << ", ptx: "     << static_cast<void*>(ptx_)
+       << ", BH: "      << &bh_
+       << ", alloc'd: " << alloc_size_
+       << ", refs: "    << ref_count_
+       << ", changed: " << (changed_ ? 'Y' : 'N')
+       << ", freed: "   << (freed_ ? 'Y' : 'N')
+        ;
+}
+
 gcache::PageStore::~PageStore ()
 {
+    if (enc2plain_.size() > 0)
+    {
+        int unflushed(0);
+        int unfreed(0);
+        for (PlainMap::iterator i(enc2plain_.begin()); i != enc2plain_.end();
+             ++i)
+        {
+            unflushed += i->second.changed_;
+            unfreed   += i->second.ptx_ != NULL;
+        }
+
+        if (unflushed > 0)
+        {
+            log_error << "Unflushed plaintext buffers: " << unflushed << '/'
+                      << enc2plain_.size();
+            if (debug_)
+            {
+                for (PlainMap::iterator i(enc2plain_.begin());
+                     i != enc2plain_.end(); ++i)
+                {
+                    if (i->second.changed_) { log_error << i->second; }
+                }
+            }
+        }
+
+        if (unfreed > 0)
+        {
+            log_error << "Unfreed plaintext buffers: " << unfreed << '/'
+                      << enc2plain_.size();
+            if (debug_)
+            {
+                for (PlainMap::iterator i(enc2plain_.begin());
+                     i != enc2plain_.end(); ++i)
+                {
+                    if (i->second.ptx_ != NULL) { log_error << i->second; }
+                }
+            }
+        }
+
+        assert(!(unflushed || unfreed));
+    }
+
     try
     {
         while (pages_.size() && delete_page()) {};
@@ -247,15 +309,23 @@ gcache::PageStore::~PageStore ()
         log_error << e.what() << " in ~PageStore()"; // abort() ?
     }
 
-    if (pages_.size() > 0)
+    if (page_cleanup_needed())
     {
-        log_error << "Could not delete " << pages_.size()
+        log_warn << "Could not delete " << pages_.size()
                   << " page files: some buffers are still \"mmapped\".";
         if (debug_)
             for (PageQueue::iterator i(pages_.begin()); i != pages_.end(); ++i)
             {
-                log_error << *(*i);;
+                log_warn << *(*i);
             }
+    }
+    else if (debug_ && pages_.size() > 0)
+    {
+        log_info << "Pages to stay: ";
+        for (PageQueue::iterator i(pages_.begin()); i != pages_.end(); ++i)
+        {
+            log_info << *(*i);
+        }
     }
 
     pthread_attr_destroy (&delete_page_attr_);
@@ -294,6 +364,7 @@ gcache::PageStore::malloc (size_type const size, void*& ptx)
     if (gu_unlikely(NULL == ptr)) ptr = malloc_new(size);
 
     BufferHeader* bh(NULL);
+    void* ret(NULL);
 
     if (gu_likely(NULL != ptr))
     {
@@ -314,7 +385,8 @@ gcache::PageStore::malloc (size_type const size, void*& ptx)
         bh->flags   = 0;
         bh->store   = BUFFER_IN_PAGE;
 
-        ptx = bh + 1;    /* this points to plaintext */
+        ptx = bh + 1;           /* this points to plaintext buf */
+        ret = BH_cast(ptr) + 1; /* points to mmapped payload */
 
         if (encrypt_cb_)
         {
@@ -328,7 +400,7 @@ gcache::PageStore::malloc (size_type const size, void*& ptx)
                 false        // freed_
             };
 
-            if (gu_unlikely(!enc2plain_.insert(PlainMapEntry(ptr,plain)).second))
+            if (gu_unlikely(!enc2plain_.insert(PlainMapEntry(ret,plain)).second))
             {
                 delete bh;
                 gu_throw_fatal << "Failed to insert plaintext ctx. Map size: "
@@ -337,12 +409,10 @@ gcache::PageStore::malloc (size_type const size, void*& ptx)
 
             plaintext_size_ += alloc_size;
         }
-
-        bh = BH_cast(ptr) + 1; // point to mmapped payload
     }
     else ptx = NULL;
 
-    return bh;
+    return ret;
 }
 
 void*
