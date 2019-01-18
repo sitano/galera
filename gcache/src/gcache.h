@@ -28,8 +28,9 @@ extern void  gcache_free        (gcache_t* gc, const void* ptr);
 
 /* use pointer to ciphertext (returned by gcache_malloc()/gcache_realloc())
  * to get/drop corresponding plaintext buffer */
-extern const void* gcache_get_plaintext (gcache_t* gc, const void* ptr);
-extern void        gcache_drop_plaintext(gcache_t* gc, const void* ptr);
+extern const void* gcache_get_ro_plaintext(gcache_t* gc, const void* ptr);
+extern       void* gcache_get_rw_plaintext(gcache_t* gc,       void* ptr);
+extern       void  gcache_drop_plaintext  (gcache_t* gc, const void* ptr);
 
 extern int64_t gcache_seqno_min (gcache_t* gc);
 

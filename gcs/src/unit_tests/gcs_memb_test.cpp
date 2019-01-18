@@ -377,14 +377,14 @@ group_sst_start (struct group* group, int const src_idx, const char* donor)
 }
 
 /* Thes test was specifically created to reproduce #465 */
-START_TEST(gcs_memb_test_465)
+static void
+t465(bool const enc)
 {
     struct group group;
     group.nodes_num = 0;
 
     struct node nodes[MAX_NODES];
     int i;
-    ssize_t ret = 0;
 
     // initialize individual node structures
     for (i = 0; i < MAX_NODES; i++) {
@@ -394,7 +394,7 @@ START_TEST(gcs_memb_test_465)
 
         sprintf(name_str, "node%d", i);
         sprintf(addr_str, "addr%d", i);
-        nodes[i].group.init(name_str, addr_str, 1, 0, 0);
+        nodes[i].group.init(name_str, addr_str, enc, 1, 0, 0);
     }
 
     gcs_node_state_t node_state;
@@ -446,13 +446,17 @@ START_TEST(gcs_memb_test_465)
     fail_if (verify_node_state_across_group (&group, 1, GCS_NODE_STATE_SYNCED));
     struct gcs_act_rcvd rcvd;
     int                 proto_ver = -1;
-    ret = gcs_group_act_conf(group.nodes[1]->group(), &rcvd, &proto_ver);
+    GcsGroup&           group1(group.nodes[1]->group);
+
+    ssize_t ret = gcs_group_act_conf(group1.group(), &rcvd, &proto_ver);
     struct gcs_act* const act(&rcvd.act);
     fail_if (ret <= 0, "gcs_group_act_cnf() retruned %zd (%s)",
              ret, strerror (-ret));
     fail_if (ret != act->buf_len);
     fail_if (proto_ver != 1 /* current version */, "proto_ver = %d", proto_ver);
-    const gcs_act_cchange conf(act->buf, act->buf_len);
+    const gcs_act_cchange conf(group1.gcache()->get_ro_plaintext(act->buf),
+                               act->buf_len);
+    group1.gcache()->free(const_cast<void*>(act->buf));
     int const my_idx(rcvd.id);
     fail_if (my_idx != 1);
     /* according to #465 this was GCS_NODE_STATE_PRIM */
@@ -460,6 +464,17 @@ START_TEST(gcs_memb_test_465)
 
     deliver_join_sync_msg (&group, 0, GCS_MSG_SYNC); // donor synced
     fail_if (verify_node_state_across_group (&group, 0, GCS_NODE_STATE_SYNCED));
+}
+
+START_TEST(gcs_memb_test_465)
+{
+    t465(false);
+}
+END_TEST
+
+START_TEST(gcs_memb_test_465E)
+{
+    t465(true);
 }
 END_TEST
 
@@ -470,5 +485,6 @@ Suite *gcs_memb_suite(void)
 
     suite_add_tcase (suite, tcase);
     tcase_add_test  (tcase, gcs_memb_test_465);
+    tcase_add_test  (tcase, gcs_memb_test_465E);
     return suite;
 }

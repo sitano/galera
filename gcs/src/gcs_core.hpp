@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2019 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -203,6 +203,9 @@ gcs_core_get_group (const gcs_core_t* core);
 #include "gcs_fifo_lite.hpp"
 extern gcs_fifo_lite_t*
 gcs_core_get_fifo (gcs_core_t* core);
+
+extern gcache_t*
+gcs_core_get_gcache(gcs_core_t* core);
 
 #endif /* GCS_CORE_TESTING */
 

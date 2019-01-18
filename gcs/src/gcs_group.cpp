@@ -1656,7 +1656,6 @@ group_select_donor (gcs_group_t* group,
 void
 gcs_group_ignore_action (gcs_group_t* group, struct gcs_act_rcvd* act)
 {
-//    if (act->act.type <= GCS_ACT_STATE_REQ) {
     if (act->act.type <= GCS_ACT_CCHANGE) {
         gcs_gcache_free (group->cache, act->act.buf);
     }
@@ -1681,9 +1680,11 @@ int
 gcs_group_handle_state_request (gcs_group_t*         group,
                                 struct gcs_act_rcvd* act)
 {
-    // pass only to sender and to one potential donor
-    const char* const donor_name    =
-        (const char*)gcs_gcache_get_plaintext(group->cache, act->act.buf);
+    // 1. pass only to sender and to one potential donor
+    // 2. the message shall be stripped of donor preamble, hence const_cast
+    char* const donor_name =
+        (char*)gcs_gcache_get_rw_plaintext(group->cache,
+                                           const_cast<void*>(act->act.buf));
     size_t const     donor_name_len = strlen(donor_name) + 1;
     int              donor_idx      = -1;
     int const        joiner_idx     = act->sender_idx;
@@ -1704,19 +1705,19 @@ gcs_group_handle_state_request (gcs_group_t*         group,
 
         try
         {
-            offset = ist_gtid.unserialize(act->act.buf, act->act.buf_len,offset);
+            offset = ist_gtid.unserialize(donor_name, act->act.buf_len, offset);
         }
         catch (gu::Exception& e) {
             log_warn << "Malformed state transfer request: " << e.what()
                      << " Ignoring";
+            gcs_gcache_drop_plaintext(group->cache, act->act.buf);
             gcs_group_ignore_action(group, act);
             return 0;
         }
 
         // change act.buf's content to original version.
         // and it's safe to change act.buf_len
-        ::memmove((char*)act->act.buf + donor_name_len,
-                  (char*)act->act.buf + offset,
+        ::memmove(donor_name + donor_name_len, donor_name + offset,
                   act->act.buf_len - offset);
         act->act.buf_len -= offset - donor_name_len;
     }
@@ -1731,6 +1732,7 @@ gcs_group_handle_state_request (gcs_group_t*         group,
             gu_error ("Requesting state transfer while in %s. "
                       "Ignoring.", joiner_status_string);
             act->id = -ECANCELED;
+            gcs_gcache_drop_plaintext(group->cache, act->act.buf);
             return act->act.buf_len;
         }
         else {
@@ -1738,6 +1740,7 @@ gcs_group_handle_state_request (gcs_group_t*         group,
                       "but its state is %s. Ignoring.",
                       joiner_idx, group->nodes[joiner_idx].segment, joiner_name,
                       joiner_status_string);
+            gcs_gcache_drop_plaintext(group->cache, act->act.buf);
             gcs_group_ignore_action (group, act);
             return 0;
         }
@@ -1751,14 +1754,13 @@ gcs_group_handle_state_request (gcs_group_t*         group,
 
     if (group->my_idx != joiner_idx && group->my_idx != donor_idx) {
         // if neither DONOR nor JOINER, ignore request
+        gcs_gcache_drop_plaintext(group->cache, act->act.buf);
         gcs_group_ignore_action (group, act);
         return 0;
     }
     else if (group->my_idx == donor_idx) {
         act->act.buf_len -= donor_name_len;
-        memmove (*(void**)&act->act.buf,
-                 ((char*)act->act.buf) + donor_name_len,
-                 act->act.buf_len);
+        memmove (donor_name, donor_name + donor_name_len, act->act.buf_len);
         // now action starts with request, like it was supplied by application,
         // see gcs_request_state_transfer()
     }
@@ -1769,6 +1771,7 @@ gcs_group_handle_state_request (gcs_group_t*         group,
     // This may be ugly, well, any ideas?
     act->id = donor_idx;
 
+    gcs_gcache_drop_plaintext(group->cache, act->act.buf);
     return act->act.buf_len;
 }
 

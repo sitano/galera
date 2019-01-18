@@ -17,7 +17,7 @@
 
 #include <iomanip>
 
-static const std::string base_name ("gcache.page.");
+static std::string const base_name = "galera.page.";
 
 static std::string
 make_base_name (const std::string& dir_name)
@@ -191,6 +191,7 @@ gcache::PageStore::new_page (size_type const size, const Page::EncKey& new_key)
 }
 
 gcache::PageStore::PageStore (const std::string&       dir_name,
+//                              const std::string&       prefix,
                               wsrep_encrypt_cb_t const encrypt_cb,
                               void*              const app_ctx,
                               size_t             const keep_size,
@@ -465,8 +466,8 @@ gcache::PageStore::find_plaintext(const void* const ptr)
     return i;
 }
 
-const void*
-gcache::PageStore::get_plaintext(const void* ptr)
+void*
+gcache::PageStore::get_plaintext(const void* ptr, bool const writable)
 {
     assert(encrypt_cb_); // must be called only if encryption callback is set
 
@@ -488,6 +489,7 @@ gcache::PageStore::get_plaintext(const void* ptr)
         assert(0 == ::memcmp(p.ptx_, &p.bh_, sizeof(p.bh_)));
     }
 
+    p.changed_ = p.changed_ || writable;
     p.ref_count_++;
 
     return p.ptx_ + 1;

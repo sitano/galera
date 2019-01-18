@@ -1,6 +1,6 @@
 ###################################################################
 #
-# Copyright (C) 2010-2017 Codership Oy <info@codership.com>
+# Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 #
 # SCons build script to build galera libraries
 #
@@ -686,6 +686,22 @@ if sysname != 'darwin':
     if not conf.CheckLib('rt'):
         print('Error: realtime library not found or not usable')
         Exit(1)
+
+if not conf.CheckCXXHeader('boost/filesystem.hpp'):
+    print('Error: boost/filesystem.hpp file not found or not usable')
+    Exit(1)
+
+if not conf.CheckLib('boost_system',
+                     language = 'CXX',
+                     autoadd = 0):
+    print('Error: boost_system library not found or not usable')
+    Exit(1)
+
+if not conf.CheckLib('boost_filesystem',
+                     language = 'CXX',
+                     autoadd = 0):
+    print('Error: boost_filesystem library not found or not usable')
+    Exit(1)
 
 conf.Finish()
 

@@ -6,6 +6,9 @@
 
 #include "../gcs_defrag.hpp"
 
+#include "gcs_test_utils.hpp"
+#include <gcache_test_encryption.hpp>
+
 #include "gcs_defrag_test.hpp" // must be included last
 
 #define TRUE (0 == 0)
@@ -22,9 +25,27 @@ defrag_check_init (gcs_defrag_t* defrag)
     fail_if (defrag->frag_no  != 0);
 }
 
-START_TEST (gcs_defrag_test)
+static void
+defrag(bool const enc)
 {
     ssize_t ret;
+
+    // Environment
+    gu::Config config;
+    std::string const cache_name("defrag.cache");
+    gcs_test::InitConfig(config, cache_name);
+    gcache::GCache* cache;
+
+    if (enc)
+    {
+        cache = new gcache::GCache(config, ".", gcache_test_encrypt_cb, NULL);
+        wsrep_enc_key_t const key = { cache, sizeof(*cache) };
+        cache->set_enc_key(key);
+    }
+    else
+    {
+        cache = new gcache::GCache(config, ".", NULL, NULL);
+    }
 
     // The Action
     char         act_buf[]  = "Test action smuction";
@@ -83,7 +104,7 @@ START_TEST (gcs_defrag_test)
     mark_point();
 
     // ready for the first fragment
-    gcs_defrag_init (&defrag, NULL);
+    gcs_defrag_init (&defrag, reinterpret_cast<gcache_t*>(cache));
     defrag_check_init (&defrag);
 
     mark_point();
@@ -132,8 +153,11 @@ START_TEST (gcs_defrag_test)
 
     // 8. Check the action
     fail_if (recv_act.buf_len != (long)act_len);
-    fail_if (strncmp((const char*)recv_act.buf, act_buf, act_len),
-             "Action received: '%s', expected '%s'",recv_act.buf,act_buf);
+    const char* const ptx
+        (static_cast<const char*>(cache->get_ro_plaintext(recv_act.buf)));
+    fail_if (strncmp(ptx, act_buf, act_len),
+             "Action received: '%s', expected '%s'", ptx, act_buf);
+    cache->drop_plaintext(recv_act.buf);
     defrag_check_init (&defrag); // should be empty
 
 // memleak in recv_act.buf !
@@ -159,6 +183,20 @@ START_TEST (gcs_defrag_test)
     defrag_check_init (&defrag); // should be empty
 
 // memleack in recv_act.buf !
+
+    delete cache;
+    ::unlink(cache_name.c_str());
+}
+
+START_TEST (gcs_defrag_test)
+{
+    defrag(false);
+}
+END_TEST
+
+START_TEST (gcs_defrag_testE)
+{
+    defrag(true);
 }
 END_TEST
 
@@ -169,6 +207,7 @@ Suite *gcs_defrag_suite(void)
 
   suite_add_tcase (suite, tcase);
   tcase_add_test  (tcase, gcs_defrag_test);
+  tcase_add_test  (tcase, gcs_defrag_testE);
   return suite;
 }
 

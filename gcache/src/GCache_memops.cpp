@@ -280,7 +280,7 @@ namespace gcache
 
         assert((uintptr_t(ptr) % MemOps::ALIGNMENT) == 0);
 
-        BufferHeader* const bh(ptr2BH(get_plaintext(ptr)));
+        BufferHeader* const bh(get_BH(ptr));
 
         if (gu_unlikely(bh->seqno_g > 0)) // sanity check
         {

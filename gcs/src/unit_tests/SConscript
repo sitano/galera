@@ -3,6 +3,19 @@ Import('check_env')
 
 env = check_env.Clone()
 
+# Add Boost filesystem libs for linking
+#conf = Configure(env)
+#if not conf.CheckLib('boost_system'):
+#    print('Error: boost_system library not found or not usable')
+#    Exit(1)
+#if not conf.CheckLibWithHeader(libs = ['boost_filesystem'],
+#                               header = 'boost/filesystem.hpp',
+#                               language = 'CXX'):
+#    print('Error: boost_filesystem library not found or not usable')
+#    Exit(1)
+#conf.Finish()
+env.Append(LIBS = [ 'boost_system', 'boost_filesystem' ])
+
 # Include paths
 env.Append(CPPPATH = Split('''
                               #/common

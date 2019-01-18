@@ -704,7 +704,6 @@ namespace galera
                             wsize = GU_WORDSIZE/8; // bits to bytes
                             void* ptx;
                             wbuf  = gcache_.malloc(wsize, ptx);
-                            (void)gcache_.get_plaintext(wbuf);
                         }
 
                         gcache_.seqno_assign(wbuf, msg.seqno(), gcs_type,

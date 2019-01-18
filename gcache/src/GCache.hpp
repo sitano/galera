@@ -87,15 +87,13 @@ namespace gcache
          * or free() is called. Subsequent call to get_plaintext() is not
          * guranteed to return the same pointer.
          */
-        inline const void* get_plaintext(const void* cphr)
+        inline const void* get_ro_plaintext(const void* cphr)
         {
-            if (encrypt_cache)
-            {
-                gu::Lock lock(mtx);
-                return ps.get_plaintext(cphr);
-            }
-            else
-                return (cphr);
+            return get_plaintext(cphr, false);
+        }
+        inline void* get_rw_plaintext(void* cphr)
+        {
+            return get_plaintext(cphr, true);
         }
 
         /*!
@@ -311,6 +309,18 @@ namespace gcache
 #ifndef NDEBUG
         std::set<const void*> buf_tracker;
 #endif
+
+        template <typename T> /* T assumes void* or const void* */
+        T get_plaintext(T const cphr, bool const writable)
+        {
+            if (encrypt_cache)
+            {
+                gu::Lock lock(mtx);
+                return ps.get_plaintext(cphr, writable);
+            }
+            else
+                return (cphr);
+        }
 
         /* change == true will mark plaintext as changed */
         BufferHeader* get_BH(const void* ptr, bool change = false)

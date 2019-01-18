@@ -45,11 +45,22 @@ gcs_gcache_free (gcache_t* gcache, const void* buf)
 }
 
 static inline const void*
-gcs_gcache_get_plaintext (gcache_t* gcache, const void* buf)
+gcs_gcache_get_ro_plaintext (gcache_t* gcache, const void* buf)
 {
 #ifndef GCS_FOR_GARB
     if (gu_likely (gcache != NULL))
-        return gcache_get_plaintext (gcache, buf);
+        return gcache_get_ro_plaintext (gcache, buf);
+    else
+#endif
+        return buf;
+}
+
+static inline void*
+gcs_gcache_get_rw_plaintext (gcache_t* gcache, void* buf)
+{
+#ifndef GCS_FOR_GARB
+    if (gu_likely (gcache != NULL))
+        return gcache_get_rw_plaintext (gcache, buf);
     else
 #endif
         return buf;

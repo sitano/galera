@@ -585,11 +585,10 @@ galera::NBOEntry copy_ts(
         gu_throw_error(ERANGE) << "Buffer size " << buf->size()
                                << " out of range";
 
-    const void* const plaintext(gcache.get_plaintext(ts->action().first));
-    std::copy(static_cast<const gu::byte_t*>(plaintext),
-              static_cast<const gu::byte_t*>(plaintext)
-              + ts->action().second,
-              buf->begin());
+    const gu::byte_t* const plaintext
+        (static_cast<const gu::byte_t*>
+         (gcache.get_ro_plaintext(ts->action().first)));
+    std::copy(plaintext, plaintext + ts->action().second, buf->begin());
 
     galera::TrxHandleSlaveDeleter d;
     gu::shared_ptr<galera::TrxHandleSlave>::type new_ts(

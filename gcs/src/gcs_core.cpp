@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2016 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2019 Codership Oy <info@codership.com>
  *
  * $Id$
  *
@@ -1605,6 +1605,12 @@ gcs_fifo_lite_t*
 gcs_core_get_fifo (gcs_core_t* core)
 {
     return core->fifo;
+}
+
+gcache_t*
+gcs_core_get_gcache(gcs_core_t* core)
+{
+    return core->cache;
 }
 
 #endif /* GCS_CORE_TESTING */

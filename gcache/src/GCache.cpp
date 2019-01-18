@@ -122,10 +122,16 @@ void  gcache_free    (gcache_t* gc, const void* ptr)
     gcache->free (const_cast<void*>(ptr));
 }
 
-const void* gcache_get_plaintext (gcache_t* gc, const void* ptr)
+const void* gcache_get_ro_plaintext (gcache_t* gc, const void* ptr)
 {
     gcache::GCache* gcache = reinterpret_cast<gcache::GCache*>(gc);
-    return gcache->get_plaintext (ptr);
+    return gcache->get_ro_plaintext (ptr);
+}
+
+void* gcache_get_rw_plaintext (gcache_t* gc, void* ptr)
+{
+    gcache::GCache* gcache = reinterpret_cast<gcache::GCache*>(gc);
+    return gcache->get_rw_plaintext (ptr);
 }
 
 void gcache_drop_plaintext (gcache_t* gc, const void* ptr)

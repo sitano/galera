@@ -55,8 +55,8 @@ namespace gcache
         }
         void  free    (BufferHeader* bh) { free(bh, NULL); }
 
-        const void* get_plaintext(const void* ptr);
-        void        drop_plaintext(const void* ptr)
+        void* get_plaintext(const void* ptr, bool writable = false);
+        void  drop_plaintext(const void* ptr)
         {
             drop_plaintext(find_plaintext(ptr), ptr, false);
         }

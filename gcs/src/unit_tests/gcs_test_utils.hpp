@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Codership Oy <info@codership.com>
+ * Copyright (C) 2015-2019 Codership Oy <info@codership.com>
  */
 
 #include "../gcs_group.hpp"
@@ -23,12 +23,14 @@ namespace gcs_test
         GcsGroup();
         GcsGroup(const std::string& node_id,
                  const std::string& inc_addr,
+                 bool enc,
                  gcs_proto_t gver = 1, int pver = 2, int aver = 3);
 
         ~GcsGroup();
 
-        void init(const char*  node_name,
-                  const char*  inc_addr,
+        void init(const std::string& node_name,
+                  const std::string& inc_addr,
+                  bool         enc,
                   gcs_proto_t  gcs_proto_ver,
                   int          repl_proto_ver,
                   int          appl_proto_ver);
@@ -41,11 +43,13 @@ namespace gcs_test
 
     private:
 
-        void common_ctor(const char* node_name, const char* inc_addr,
-                         gcs_proto_t gver, int rver, int aver);
+        void common_ctor(const std::string& node_name,
+                         const std::string& inc_addr,
+                         bool enc, gcs_proto_t gver, int rver, int aver);
 
         void common_dtor();
 
+        std::string        path_;
         gu::Config         conf_;
         InitConfig         init_;
         gcache::GCache*    gcache_;

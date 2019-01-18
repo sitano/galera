@@ -425,7 +425,7 @@ namespace galera
             try
             {
                 const void* plaintext(decrypt ?
-                                      gcache.get_plaintext(act.buf) : act.buf);
+                                      gcache.get_ro_plaintext(act.buf) :act.buf);
                 /* plaintext resource will be released on GCache::free() later
                  * in trx lifecycle */
 
