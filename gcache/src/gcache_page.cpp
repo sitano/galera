@@ -226,13 +226,16 @@ gcache::Page::xcrypt(wsrep_encrypt_cb_t    const encrypt_cb,
 
 void gcache::Page::print(std::ostream& os) const
 {
-    os << "page file: " << name() << ", size: " << size() << ", used: "
+    os << "page file: " << name() << ", size: " << size() << ", used bufs: "
        << used_;
 
+#if 0 // disabling until figuring out support for encrypted files
+      // most likely this functionality needs to be moved up to PageStorage class
     if (used_ > 0 && debug_ > 0)
     {
         bool was_released(true);
-        const uint8_t* const start(static_cast<uint8_t*>(mmap_.ptr));
+        const uint8_t* const start
+            (static_cast<uint8_t*>(mmap_.ptr) + nonce_serial_size(mmpa_.size));
         const uint8_t* p(start);
         assert(p != next_);
         while (p != next_)
@@ -255,4 +258,5 @@ void gcache::Page::print(std::ostream& os) const
             }
         }
     }
+#endif
 }

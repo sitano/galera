@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2019 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -926,7 +926,9 @@ static void
 gcs_handle_act_conf (gcs_conn_t* conn, gcs_act_rcvd& rcvd)
 {
     const gcs_act& act(rcvd.act);
-    gcs_act_cchange const conf(act.buf, act.buf_len);
+    const void* ptx = gcs_gcache_get_ro_plaintext(conn->gcache, act.buf);
+    gcs_act_cchange const conf(ptx, act.buf_len);
+    gcs_gcache_drop_plaintext(conn->gcache, act.buf);
 
     assert(rcvd.id >= 0 || 0 == conf.memb.size());
     assert(conf.vote_res <= 0);

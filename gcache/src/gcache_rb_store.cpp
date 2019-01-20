@@ -870,7 +870,8 @@ namespace gcache
             else if (offset == 0 && segment_start == start_)
             {
                 /* single segment case */
-                assert(1 == segment_scans);
+                assert(1 == segment_scans ||
+                       segment_start + sizeof(BufferHeader) > segment_end);
                 first_ = segment_start;
                 next_ = ptr;
                 break;

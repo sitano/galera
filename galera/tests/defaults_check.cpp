@@ -5,6 +5,8 @@
 #include <wsrep_api.h>
 extern "C" int wsrep_loader(wsrep_t*);
 
+#include <gcache_test_encryption.hpp>
+
 #include <gu_config.hpp>
 #include <gu_mutex.hpp>
 #include <gu_cond.hpp>
@@ -227,7 +229,8 @@ recv_func(void* ctx)
     return NULL;
 }
 
-START_TEST(defaults)
+static void
+defaults(bool const enc)
 {
     DefaultsMap expected_defaults, real_defaults;
 
@@ -237,6 +240,8 @@ START_TEST(defaults)
     wsrep_t& provider(ctx.provider_);
     int ret = wsrep_status_t(wsrep_loader(&provider));
     fail_if(WSREP_OK != ret);
+
+    wsrep_encrypt_cb_t const enc_cb(enc ? gcache_test_encrypt_cb : NULL);
 
     struct wsrep_init_args init_args =
         {
@@ -259,7 +264,7 @@ START_TEST(defaults)
             conn_cb,  // wsrep_connected_cb_t   connected_cb
             view_cb,  // wsrep_view_cb_t        view_handler_cb
             NULL,     // wsrep_sst_request_cb_t sst_request_cb
-            NULL,     // wsrep_encrypt_cb_t     encrypt_cb
+            enc_cb,   // wsrep_encrypt_cb_t     encrypt_cb
 
             /* Applier callbacks */
             NULL,     // wsrep_apply_cb_t       apply_cb
@@ -306,9 +311,15 @@ START_TEST(defaults)
     provider.free(&provider);
     mark_point();
 
-    /* cleanup files */
+    /* cleanup leftover files */
     ::unlink(real_defaults.find("gcache.name")->second.c_str());
     ::unlink("grastate.dat");
+    if (enc)
+    {
+        static const char* page_file = "galera.page.000000";
+        fail_if(::unlink(page_file), "Failed to cleanup page file '%s': %d(%s)",
+                page_file, errno, strerror(errno));
+    }
 
     /* now compare expected and real maps */
     std::ostringstream err;
@@ -350,6 +361,17 @@ START_TEST(defaults)
     fail_if (!err.str().empty(), "Defaults discrepancies detected:\n%s",
              err.str().c_str());
 }
+
+START_TEST(test_defaults)
+{
+    defaults(false);
+}
+END_TEST
+
+START_TEST(test_defaultsE)
+{
+    defaults(true);
+}
 END_TEST
 
 Suite* defaults_suite()
@@ -358,7 +380,8 @@ Suite* defaults_suite()
     TCase* tc;
 
     tc = tcase_create("defaults");
-    tcase_add_test(tc, defaults);
+    tcase_add_test(tc, test_defaults);
+    tcase_add_test(tc, test_defaultsE);
     tcase_set_timeout(tc, 120);
     suite_add_tcase(s, tc);
 

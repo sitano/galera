@@ -319,6 +319,7 @@ namespace galera
                     copied += actv[i].size;
                 }
                 assert (copied == act.size);
+                gcache_->drop_plaintext(act.buf);
             }
 
             return ret;
@@ -334,6 +335,7 @@ namespace galera
                 void* ptx;
                 void* const ptr(gcache_->malloc(act.size, ptx));
                 memcpy (ptx, act.buf, act.size);
+                gcache_->drop_plaintext(ptr);
                 act.buf = ptr;
                 // no freeing here - initial act.buf belongs to the caller
             }

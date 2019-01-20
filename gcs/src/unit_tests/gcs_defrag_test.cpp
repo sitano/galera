@@ -71,11 +71,6 @@ defrag(bool const enc)
 
     mark_point();
 
-#ifndef NDEBUG
-    // debug build breaks this test due to asserts
-    return;
-#endif
-
     // Initialize message parameters
     frg1.act_id    = getpid();
     frg1.act_size  = act_len;
@@ -151,39 +146,38 @@ defrag(bool const enc)
     ret = gcs_defrag_handle_frag (&defrag, &frg3, &recv_act, FALSE);
     fail_if (ret != (long)act_len);
 
+#define CHECK_ACTION(origin)                                            \
+    {                                                                   \
+        const char* ptx                                                 \
+            (static_cast<const char*>(cache->get_ro_plaintext(recv_act.buf))); \
+        fail_if (strncmp(ptx, act_buf, act_len),                        \
+                 "%s action received: '%s', expected '%s'",             \
+                 origin, ptx, act_buf);                                 \
+        cache->free(const_cast<void*>(recv_act.buf));                   \
+    }
+
     // 8. Check the action
     fail_if (recv_act.buf_len != (long)act_len);
-    const char* const ptx
-        (static_cast<const char*>(cache->get_ro_plaintext(recv_act.buf)));
-    fail_if (strncmp(ptx, act_buf, act_len),
-             "Action received: '%s', expected '%s'", ptx, act_buf);
-    cache->drop_plaintext(recv_act.buf);
+    CHECK_ACTION("Remote");
     defrag_check_init (&defrag); // should be empty
-
-// memleak in recv_act.buf !
 
     // 9. Try the same with local action
     ret = gcs_defrag_handle_frag (&defrag, &frg1, &recv_act, TRUE);
     fail_if (ret != 0);
-//    fail_if (defrag.head != NULL); (and now we may allocate it for cache)
 
     ret = gcs_defrag_handle_frag (&defrag, &frg2, &recv_act, TRUE);
     fail_if (ret != 0);
-//    fail_if (defrag.head != NULL); (and now we may allocate it for cache)
 
     ret = gcs_defrag_handle_frag (&defrag, &frg3, &recv_act, TRUE);
     fail_if (ret != (long)act_len);
-//    fail_if (defrag.head != NULL); (and now we may allocate it for cache)
-
+    CHECK_ACTION("Local");
 
     // 10. Check the action
     fail_if (recv_act.buf_len != (long)act_len);
-//    fail_if (recv_act.buf != NULL); (and now we may allocate it for cache)
 
     defrag_check_init (&defrag); // should be empty
 
-// memleack in recv_act.buf !
-
+    mark_point();
     delete cache;
     ::unlink(cache_name.c_str());
 }

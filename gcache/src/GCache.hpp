@@ -235,6 +235,9 @@ namespace gcache
         /*! @throws NotFound */
         void param_set (const std::string& key, const std::string& val);
 
+        /* prints out buffer metadata */
+        std::string meta(const void* ptr);
+
         static size_t const PREAMBLE_LEN;
 
     private:

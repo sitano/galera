@@ -424,10 +424,12 @@ namespace galera
 
             try
             {
-                const void* plaintext(decrypt ?
-                                      gcache.get_ro_plaintext(act.buf) :act.buf);
+                void* ptr(const_cast<void*>(act.buf));
+                void* plaintext(decrypt ?
+                                gcache.get_rw_plaintext(ptr) : ptr);
                 /* plaintext resource will be released on GCache::free() later
-                 * in trx lifecycle */
+                 * in trx lifecycle. In the meantime it will be updated with
+                 * global seqno and certification verdict. */
 
                 version_ = WriteSetNG::version(plaintext, act.size);
                 action_  = std::make_pair(act.buf, act.size);
@@ -437,7 +439,7 @@ namespace galera
                 case WriteSetNG::VER3:
                 case WriteSetNG::VER4:
                 case WriteSetNG::VER5:
-                    write_set_.read_buf (plaintext, act.size);
+                    write_set_.read_buf(plaintext, act.size);
                     assert(version_ == write_set_.version());
                     write_set_flags_ = fixup_write_set_flags(
                         version_,

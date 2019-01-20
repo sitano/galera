@@ -14,12 +14,24 @@
 
 using namespace galera;
 
-START_TEST(service_thd1)
+static void
+thd1(bool const enc)
 {
-    TestEnv env("service_thd_check");
+    TestEnv env("service_thd_check", enc);
     ServiceThd* thd = new ServiceThd(env.gcs(), env.gcache());
     fail_if (thd == 0);
     delete thd;
+}
+
+START_TEST(service_thd1)
+{
+    thd1(false);
+}
+END_TEST
+
+START_TEST(service_thd1E)
+{
+    thd1(true);
 }
 END_TEST
 
@@ -27,9 +39,10 @@ END_TEST
 #define WAIT_FOR(cond)                                                  \
     { int count = 1000; while (--count && !(cond)) { usleep (TEST_USLEEP); }}
 
-START_TEST(service_thd2)
+static void
+thd2(bool const enc)
 {
-    TestEnv env("service_thd_check");
+    TestEnv env("service_thd_check", enc);
     DummyGcs& conn(env.gcs());
     ServiceThd* thd = new ServiceThd(conn, env.gcache());
     gu::UUID const state_uuid(NULL, 0);
@@ -72,11 +85,23 @@ START_TEST(service_thd2)
 
     delete thd;
 }
+
+START_TEST(service_thd2)
+{
+    thd2(false);
+}
 END_TEST
 
-START_TEST(service_thd3)
+START_TEST(service_thd2E)
 {
-    TestEnv env("service_thd_check");
+    thd2(true);
+}
+END_TEST
+
+static void
+thd3(bool const enc)
+{
+    TestEnv env("service_thd_check", enc);
     ServiceThd* thd = new ServiceThd(env.gcs(), env.gcache());
     fail_if (thd == 0);
     // so far for empty GCache the following should be a noop.
@@ -84,6 +109,17 @@ START_TEST(service_thd3)
     thd->release_seqno(2345);
     thd->release_seqno(234645676);
     delete thd;
+}
+
+START_TEST(service_thd3)
+{
+    thd3(false);
+}
+END_TEST
+
+START_TEST(service_thd3E)
+{
+    thd3(true);
 }
 END_TEST
 
@@ -94,8 +130,11 @@ Suite* service_thd_suite()
 
     tc = tcase_create ("service_thd");
     tcase_add_test  (tc, service_thd1);
+    tcase_add_test  (tc, service_thd1E);
     tcase_add_test  (tc, service_thd2);
+    tcase_add_test  (tc, service_thd2E);
     tcase_add_test  (tc, service_thd3);
+    tcase_add_test  (tc, service_thd3E);
     suite_add_tcase (s, tc);
 
     return s;

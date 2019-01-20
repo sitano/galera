@@ -2,6 +2,7 @@
 // Copyright (C) 2011-2019 Codership Oy <info@codership.com>
 //
 
+#include "galera_test_env.hpp"
 
 #include "ist.hpp"
 #include "ist_proto.hpp"
@@ -170,7 +171,8 @@ namespace
     class ISTHandler : public galera::ist::EventHandler
     {
     public:
-        ISTHandler() :
+        ISTHandler(gcache::GCache& gc) :
+            gcache_(gc),
             mutex_(),
             cond_(),
             seqno_(0),
@@ -208,7 +210,9 @@ namespace
 
         void ist_cc(const gcs_action& act, bool must_apply, bool preload)
         {
-            gcs_act_cchange const cc(act.buf, act.size);
+            const void* ptx(gcache_.get_ro_plaintext(act.buf));
+            gcs_act_cchange const cc(ptx, act.size);
+            gcache_.drop_plaintext(act.buf);
             assert(act.seqno_g == cc.seqno);
 
             log_info << "ist_cc" << cc.seqno;
@@ -220,6 +224,7 @@ namespace
             {
                 assert(seqno_ < cc.seqno);
             }
+            seqno_ = cc.seqno;
         }
 
         void ist_end(int error)
@@ -241,7 +246,10 @@ namespace
             return error_;
         }
 
+        wsrep_seqno_t seqno() const { return seqno_; }
+
     private:
+        gcache::GCache& gcache_;
         gu::Mutex mutex_;
         gu::Cond  cond_;
         wsrep_seqno_t seqno_;
@@ -264,7 +272,7 @@ extern "C" void* receiver_thd(void* arg)
     mark_point();
 
     conf.set(galera::ist::Receiver::RECV_ADDR, rargs->listen_addr_);
-    ISTHandler isth;
+    ISTHandler isth(rargs->gcache_);
     galera::ist::Receiver receiver(conf, rargs->gcache_, slave_pool,
                                    isth, 0);
 
@@ -278,9 +286,16 @@ extern "C" void* receiver_thd(void* arg)
 
     receiver.ready(rargs->first_);
 
-    log_info << "IST wait finished with status: " << isth.wait();
+    int ist_error(isth.wait());
+    log_info << "IST wait finished with status: " << ist_error;
+    assert(0 == ist_error);
+    fail_if(0 != ist_error, "Receiver exits with error: %d", ist_error);
 
     receiver.finished();
+
+    // gcache cleanup like what would result after purge_trxs_upto()
+    rargs->gcache_.seqno_release(isth.seqno());
+
     return 0;
 }
 
@@ -367,9 +382,10 @@ static void store_trx(gcache::GCache* const gcache,
         wsi.set_seqno(i, pa_range);
         assert (wsi.seqno()     == int64_t(i));
         assert (wsi.pa_range()  == pa_range);
-    }
 
-    gcache->seqno_assign(ptr, i, GCS_ACT_WRITESET, (i - pa_range) <= 0);
+        gcache->seqno_assign(ptr, i, GCS_ACT_WRITESET, (i - pa_range) <= 0);
+        gcache->free(ptr);
+    }
 }
 
 static void store_cc(gcache::GCache* const gcache,
@@ -386,21 +402,37 @@ static void store_cc(gcache::GCache* const gcache,
     cc.conf_id = conf_id++;
 
     void* tmp;
-    void* ptx;
     int   const cc_size(cc.write(&tmp));
+    void* ptx;
     void* const cc_ptr(gcache->malloc(cc_size, ptx));
 
     fail_if(NULL == cc_ptr);
     memcpy(ptx, tmp, cc_size);
 
     gcache->seqno_assign(cc_ptr, i, GCS_ACT_CCHANGE, i > 0);
+    gcache->free(cc_ptr);
 }
 
-static void test_ist_common(int const version)
+void log_test_name(int const v, bool const send_enc, bool const recv_enc)
+{
+    log_info << "\n\n"
+        "##########################\n"
+        "##                      ##\n"
+        "##      IST v" << v << ' ' << (send_enc ? 'E' : 'P')
+             << (recv_enc ? 'E' : 'P') << "     ##\n"
+        "##                      ##\n"
+        "##########################\n";
+}
+
+static void test_ist_common(int  const version,
+                            bool const sender_enc,
+                            bool const receiver_enc)
 {
     using galera::KeyData;
     using galera::TrxHandle;
     using galera::KeyOS;
+
+    log_test_name(version, sender_enc, receiver_enc);
 
     TrxHandleMaster::Pool lp(TrxHandleMaster::LOCAL_STORAGE_SIZE(), 4,
                              "ist_common");
@@ -409,21 +441,13 @@ static void test_ist_common(int const version)
     int const trx_version(select_trx_version(version));
     TrxHandleMaster::Params const trx_params("", trx_version,
                                        galera::KeySet::MAX_VERSION);
-    std::string const dir(".");
 
-    gu::Config conf_sender;
-    galera::ReplicatorSMM::InitConfig(conf_sender, NULL, NULL);
-    std::string const gcache_sender_file("ist_sender.cache");
-    conf_sender.set("gcache.name", gcache_sender_file);
-    conf_sender.set("gcache.size", "1M");
-    gcache::GCache* gcache_sender = new gcache::GCache(conf_sender, dir);
+    TestEnv sender_env("ist_sender", sender_enc);
+    gcache::GCache* gcache_sender = &sender_env.gcache();
+    if (sender_enc) gcache_sender->param_set("gcache.keep_pages_size", "1M");
 
-    gu::Config conf_receiver;
-    galera::ReplicatorSMM::InitConfig(conf_receiver, NULL, NULL);
-    std::string const gcache_receiver_file("ist_receiver.cache");
-    conf_receiver.set("gcache.name", gcache_receiver_file);
-    conf_receiver.set("gcache.size", "1M");
-    gcache::GCache* gcache_receiver = new gcache::GCache(conf_receiver, dir);
+    TestEnv receiver_env("ist_receiver", receiver_enc);
+    gcache::GCache* gcache_receiver = &receiver_env.gcache();
 
     std::string receiver_addr("tcp://127.0.0.1:0");
     wsrep_uuid_t uuid;
@@ -463,36 +487,105 @@ static void test_ist_common(int const version)
     gu_thread_join(receiver_thread, 0);
 
     mark_point();
-
-    delete gcache_sender;
-    delete gcache_receiver;
-
-    mark_point();
-    unlink(gcache_sender_file.c_str());
-    unlink(gcache_receiver_file.c_str());
 }
 
-START_TEST(test_ist_v7)
+/* REPL proto 7 tests: trx ver: 3, STR ver: 2, alignment: - */
+START_TEST(test_ist_v7PP)
 {
-    test_ist_common(7);      /* trx ver: 3, STR ver: 2, alignment: none */
+    test_ist_common(7, false, false);
 }
 END_TEST
 
-START_TEST(test_ist_v8)
+START_TEST(test_ist_v7PE)
 {
-    test_ist_common(8);      /* trx ver: 3, STR ver: 2, alignment: 8    */
+    test_ist_common(7, false, true);
 }
 END_TEST
 
-START_TEST(test_ist_v9)
+START_TEST(test_ist_v7EP)
 {
-    test_ist_common(9);      /* trx ver: 4, STR ver: 2, alignment: 8    */
+    test_ist_common(7, true, false);
 }
 END_TEST
 
-START_TEST(test_ist_v10)
+START_TEST(test_ist_v7EE)
 {
-    test_ist_common(10);     /* trx ver: 5, STR ver: 3, alignment: 8    */
+    test_ist_common(7, true, true);
+}
+END_TEST
+
+/* REPL proto 8 tests: trx ver: 3, STR ver: 2, alignment: 8 */
+START_TEST(test_ist_v8PP)
+{
+    test_ist_common(8, false, false);
+}
+END_TEST
+
+START_TEST(test_ist_v8PE)
+{
+    test_ist_common(8, false, true);
+}
+END_TEST
+
+START_TEST(test_ist_v8EP)
+{
+    test_ist_common(8, true, false);
+}
+END_TEST
+
+START_TEST(test_ist_v8EE)
+{
+    test_ist_common(8, true, true);
+}
+END_TEST
+
+/* REPL proto 9 tests: trx ver: 4, STR ver: 2, alignment: 8 */
+START_TEST(test_ist_v9PP)
+{
+    test_ist_common(9, false, false);
+}
+END_TEST
+
+START_TEST(test_ist_v9PE)
+{
+    test_ist_common(9, false, true);
+}
+END_TEST
+
+START_TEST(test_ist_v9EP)
+{
+    test_ist_common(9, true, false);
+}
+END_TEST
+
+START_TEST(test_ist_v9EE)
+{
+    test_ist_common(9, true, true);
+}
+END_TEST
+
+/* REPL proto 10 (Galera 4.0) tests: trx ver: 5, STR ver: 3, alignment: 8 */
+START_TEST(test_ist_v10PP)
+{
+    test_ist_common(10, false, false);
+}
+END_TEST
+
+START_TEST(test_ist_v10PE)
+{
+    test_ist_common(10, false, true);
+}
+END_TEST
+
+START_TEST(test_ist_v10EP)
+{
+    test_ist_common(10, true, false);
+}
+END_TEST
+
+START_TEST(test_ist_v10EE)
+{
+    test_ist_common(10, true, true);
 }
 END_TEST
 
@@ -506,16 +599,31 @@ Suite* ist_suite()
     suite_add_tcase(s, tc);
     tc = tcase_create("test_ist_v7");
     tcase_set_timeout(tc, 60);
-    tcase_add_test(tc, test_ist_v7);
+    tcase_add_test(tc, test_ist_v7PP);
+    tcase_add_test(tc, test_ist_v7PE);
+    tcase_add_test(tc, test_ist_v7EP);
+    tcase_add_test(tc, test_ist_v7EE);
+    suite_add_tcase(s, tc);
     tc = tcase_create("test_ist_v8");
     tcase_set_timeout(tc, 60);
-    tcase_add_test(tc, test_ist_v8);
+    tcase_add_test(tc, test_ist_v8PP);
+    tcase_add_test(tc, test_ist_v8PE);
+    tcase_add_test(tc, test_ist_v8EP);
+    tcase_add_test(tc, test_ist_v8EE);
+    suite_add_tcase(s, tc);
     tc = tcase_create("test_ist_v9");
     tcase_set_timeout(tc, 60);
-    tcase_add_test(tc, test_ist_v9);
+    tcase_add_test(tc, test_ist_v9PP);
+    tcase_add_test(tc, test_ist_v9PE);
+    tcase_add_test(tc, test_ist_v9EP);
+    tcase_add_test(tc, test_ist_v9EE);
+    suite_add_tcase(s, tc);
     tc = tcase_create("test_ist_v10");
     tcase_set_timeout(tc, 60);
-    tcase_add_test(tc, test_ist_v10);
+    tcase_add_test(tc, test_ist_v10PP);
+    tcase_add_test(tc, test_ist_v10PE);
+    tcase_add_test(tc, test_ist_v10EP);
+    tcase_add_test(tc, test_ist_v10EE);
     suite_add_tcase(s, tc);
 
     return s;

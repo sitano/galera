@@ -312,15 +312,15 @@ gcache::PageStore::~PageStore ()
 
     if (page_cleanup_needed())
     {
-        log_warn << "Could not delete " << pages_.size()
-                  << " page files: some buffers are still \"mmapped\".";
+        log_info << "Could not delete " << pages_.size()
+                 << " page files: some buffers are still \"mmapped\".";
         if (debug_)
             for (PageQueue::iterator i(pages_.begin()); i != pages_.end(); ++i)
             {
                 log_warn << *(*i);
             }
     }
-    else if (debug_ && pages_.size() > 0)
+    else if (debug_ && pages_.size() > 0 )
     {
         log_info << "Pages to stay: ";
         for (PageQueue::iterator i(pages_.begin()); i != pages_.end(); ++i)
@@ -476,6 +476,7 @@ gcache::PageStore::get_plaintext(const void* ptr, bool const writable)
 
     Plain& p(i->second);
     assert(p.page_);
+    assert(!writable || !p.freed_); // should not change freed buffer
 
     if (NULL == p.ptx_)
     {

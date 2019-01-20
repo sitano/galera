@@ -346,9 +346,9 @@ namespace gcache
         // the following may cause IO
         for (size_t i(0); i < found; ++i)
         {
-            const BufferHeader* const bh (ptr2BH(v[i].ptr()));
+            const BufferHeader* const bh(get_BH(v[i].ptr()));
 
-            assert (bh->seqno_g == int64_t(start + i));
+            assert (bh->seqno_g == seqno_t(start + i));
             Limits::assert_size(bh->size);
 
             v[i].set_other (bh->seqno_g,

@@ -96,6 +96,11 @@ namespace gcache
         size_t total_pages() const { return pages_.size(); }
         size_t total_size()  const { return total_size_;   }
 
+        void meta(const void* const ptr, std::ostream& os)
+        {
+            os << find_plaintext(ptr)->second;
+        }
+
     private:
 
         struct Plain

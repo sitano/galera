@@ -4,7 +4,6 @@
 
 #include "gcache_test_encryption.hpp"
 
-//remove #include <gu_macros.hpp>
 #include <gu_digest.hpp>
 
 #define NAMESPACE_GCACHE_TEST_BEGIN namespace gcache { namespace test {

@@ -33,92 +33,106 @@ namespace
 }
 
 static
-void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version)
+void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version,
+                bool const enc)
 {
     galera::TrxHandleMaster::Pool mp(
         sizeof(galera::TrxHandleMaster) + sizeof(galera::WriteSetOut),
         16, "certification_mp");
     galera::TrxHandleSlave::Pool sp(
         sizeof(galera::TrxHandleSlave), 16, "certification_sp");
-    TestEnv env("cert");
-    galera::Certification cert(env.conf(), env.gcache(), 0);
+    TestEnv env("cert", enc);
 
-    gu::UUID uuid;
-    cert.assign_initial_position(gu::GTID(uuid, 0), version);
-    galera::TrxHandleMaster::Params const trx_params(
-        "", version, galera::KeySet::MAX_VERSION);
+    {   // At least with GCC 5.4.0-6ubuntu1~16.04.10 another scope is needed
+        // to guarantee cert object destruction before env destruction.
+        galera::Certification cert(env.conf(), env.gcache(), 0);
 
-    mark_point();
+        gu::UUID uuid;
+        cert.assign_initial_position(gu::GTID(uuid, 0), version);
+        galera::TrxHandleMaster::Params const trx_params(
+            "", version, galera::KeySet::MAX_VERSION);
 
-    for (size_t i(0); i < nws; ++i)
-    {
-        galera::TrxHandleMasterPtr trx(galera::TrxHandleMaster::New(
-                                           mp,
-                                           trx_params,
-                                           wsi[i].uuid,
-                                           wsi[i].conn_id,
-                                           wsi[i].trx_id),
-                                       galera::TrxHandleMasterDeleter());
-        trx->set_flags(wsi[i].flags);
-        trx->append_key(
-            galera::KeyData(version,
-                            wsi[i].key,
-                            wsi[i].iov_len,
-                            (wsi[i].shared ? WSREP_KEY_SHARED :
-                             WSREP_KEY_EXCLUSIVE),
-                            true));
+        mark_point();
 
-
-        if (wsi[i].data_len)
+        for (size_t i(0); i < nws; ++i)
         {
-            trx->append_data(wsi[i].data_ptr, wsi[i].data_len,
-                             WSREP_DATA_ORDERED, false);
-        }
+            galera::TrxHandleMasterPtr trx(galera::TrxHandleMaster::New(
+                                               mp,
+                                               trx_params,
+                                               wsi[i].uuid,
+                                               wsi[i].conn_id,
+                                               wsi[i].trx_id),
+                                           galera::TrxHandleMasterDeleter());
+            trx->set_flags(wsi[i].flags);
+            trx->append_key(
+                galera::KeyData(version,
+                                wsi[i].key,
+                                wsi[i].iov_len,
+                                (wsi[i].shared ? WSREP_KEY_SHARED :
+                                 WSREP_KEY_EXCLUSIVE),
+                                true));
 
-        galera::WriteSetNG::GatherVector out;
-        size_t size(trx->write_set_out().gather(trx->source_id(),
-                                                trx->conn_id(),
-                                                trx->trx_id(),
-                                                out));
-        trx->finalize(wsi[i].last_seen_seqno);
+            if (wsi[i].data_len)
+            {
+                trx->append_data(wsi[i].data_ptr, wsi[i].data_len,
+                                 WSREP_DATA_ORDERED, false);
+            }
 
-        // serialize write set into gcache buffer
-        void* ptx;
-        void* buf(env.gcache().malloc(size,ptx));
-        fail_unless(out.serialize(buf, size) == size);
+            galera::WriteSetNG::GatherVector out;
+            size_t size(trx->write_set_out().gather(trx->source_id(),
+                                                    trx->conn_id(),
+                                                    trx->trx_id(),
+                                                    out));
+            trx->finalize(wsi[i].last_seen_seqno);
 
+            // serialize write set into gcache buffer
+            void* ptx;
+            void* buf(env.gcache().malloc(size, ptx));
+            fail_unless(out.serialize(ptx, size) == size);
+            env.gcache().drop_plaintext(buf); // like before the slave queue
 
-        gcs_action act = {wsi[i].global_seqno,
-                          wsi[i].local_seqno,
-                          buf,
-                          static_cast<int32_t>(size),
-                          GCS_ACT_WRITESET};
-        galera::TrxHandleSlavePtr ts(galera::TrxHandleSlave::New(false, sp),
-                                     galera::TrxHandleSlaveDeleter());
-        /* even though ptx was not flushed to buf yet, unserialize() should
-         * pick it from gcache */
-        fail_unless(ts->unserialize<true>(env.gcache(), act) == size);
+            gcs_action act = {wsi[i].global_seqno,
+                              wsi[i].local_seqno,
+                              buf,
+                              static_cast<int32_t>(size),
+                              GCS_ACT_WRITESET};
+            galera::TrxHandleSlavePtr ts(galera::TrxHandleSlave::New(false, sp),
+                                         galera::TrxHandleSlaveDeleter());
+            /* even though ptx was not flushed to buf yet, unserialize() should
+             * pick it from gcache */
+            fail_unless(ts->unserialize<true>(env.gcache(), act) == size);
 
-        galera::Certification::TestResult result(cert.append_trx(ts));
-        fail_unless(result == wsi[i].result, "g: %lld res: %d exp: %d",
-                    ts->global_seqno(), result, wsi[i].result);
-        fail_unless(ts->depends_seqno() == wsi[i].expected_depends_seqno,
-                    "wsi: %zu g: %lld ld: %lld eld: %lld",
-                    i, ts->global_seqno(), ts->depends_seqno(),
-                    wsi[i].expected_depends_seqno);
-        cert.set_trx_committed(*ts);
+            galera::Certification::TestResult result(cert.append_trx(ts));
+            fail_unless(result == wsi[i].result, "g: %lld res: %d exp: %d",
+                        ts->global_seqno(), result, wsi[i].result);
+            fail_unless(ts->depends_seqno() == wsi[i].expected_depends_seqno,
+                        "wsi: %zu g: %lld ld: %lld eld: %lld",
+                        i, ts->global_seqno(), ts->depends_seqno(),
+                        wsi[i].expected_depends_seqno);
+            cert.set_trx_committed(*ts);
+            mark_point();
 
-        if (ts->nbo_end() && ts->ends_nbo() != WSREP_SEQNO_UNDEFINED)
-        {
-            cert.erase_nbo_ctx(ts->ends_nbo());
+            // so that the buffer can be released later
+            env.gcache().seqno_assign(buf, ts->global_seqno(), GCS_ACT_WRITESET,
+                                      false);
+            mark_point();
+
+            if (ts->nbo_end() && ts->ends_nbo() != WSREP_SEQNO_UNDEFINED)
+            {
+                cert.erase_nbo_ctx(ts->ends_nbo());
+            }
+            mark_point();
         }
     }
+    mark_point();
+    // gcache cleanup like what would result after purge_trxs_upto()
+    env.gcache().seqno_release(wsi[nws - 1].global_seqno);
 }
 
 
-START_TEST(test_certification_trx_v3)
+static void
+certification_trx_v3(bool const enc)
 {
-
     const int version(3);
     using galera::Certification;
     using galera::TrxHandle;
@@ -205,12 +219,24 @@ START_TEST(test_certification_trx_v3)
 
     size_t nws(sizeof(wsi)/sizeof(wsi[0]));
 
-    run_wsinfo(wsi, nws, version);
+    run_wsinfo(wsi, nws, version, enc);
+}
 
+START_TEST(test_certification_trx_v3)
+{
+    certification_trx_v3(false);
 }
 END_TEST
 
-START_TEST(test_certification_trx_different_level_v3)
+START_TEST(test_certification_trx_v3E)
+{
+    certification_trx_v3(true);
+}
+END_TEST
+
+
+static void
+certification_trx_different_level_v3(bool const enc)
 {
     const int version(3);
     using galera::Certification;
@@ -245,13 +271,25 @@ START_TEST(test_certification_trx_different_level_v3)
 
     size_t nws(sizeof(wsi)/sizeof(wsi[0]));
 
-    run_wsinfo(wsi, nws, version);
+    run_wsinfo(wsi, nws, version, enc);
+}
+
+START_TEST(test_certification_trx_different_level_v3)
+{
+    certification_trx_different_level_v3(false);
 }
 END_TEST
 
-START_TEST(test_certification_toi_v3)
+START_TEST(test_certification_trx_different_level_v3E)
 {
+    certification_trx_different_level_v3(true);
+}
+END_TEST
 
+
+static void
+certification_toi_v3(bool const enc)
+{
     const int version(3);
     using galera::Certification;
     using galera::TrxHandle;
@@ -306,13 +344,24 @@ START_TEST(test_certification_toi_v3)
 
     size_t nws(sizeof(wsi)/sizeof(wsi[0]));
 
-    run_wsinfo(wsi, nws, version);
+    run_wsinfo(wsi, nws, version, enc);
+}
 
+START_TEST(test_certification_toi_v3)
+{
+    certification_toi_v3(false);
+}
+END_TEST
+
+START_TEST(test_certification_toi_v3E)
+{
+    certification_toi_v3(true);
 }
 END_TEST
 
 
-START_TEST(test_certification_nbo)
+static void
+certification_nbo(bool const enc)
 {
     log_info << "START: test_certification_nbo";
     const int version(galera::WriteSetNG::VER5);
@@ -372,14 +421,26 @@ START_TEST(test_certification_nbo)
 
     size_t nws(sizeof(wsi)/sizeof(wsi[0]));
 
-    run_wsinfo(wsi, nws, version);
+    run_wsinfo(wsi, nws, version, enc);
 
     log_info << "END: test_certification_nbo";
+}
+
+START_TEST(test_certification_nbo)
+{
+    certification_nbo(false);
+}
+END_TEST
+
+START_TEST(test_certification_nboE)
+{
+    certification_nbo(true);
 }
 END_TEST
 
 
-START_TEST(test_certification_commit_fragment)
+static void
+certification_commit_fragment(bool const enc)
 {
     const int version(galera::WriteSetNG::VER5);
     using galera::Certification;
@@ -421,7 +482,18 @@ START_TEST(test_certification_commit_fragment)
 
     size_t nws(sizeof(wsi)/sizeof(wsi[0]));
 
-    run_wsinfo(wsi, nws, version);
+    run_wsinfo(wsi, nws, version, enc);
+}
+
+START_TEST(test_certification_commit_fragment)
+{
+    certification_commit_fragment(false);
+}
+END_TEST
+
+START_TEST(test_certification_commit_fragmentE)
+{
+    certification_commit_fragment(true);
 }
 END_TEST
 
@@ -433,26 +505,27 @@ Suite* certification_suite()
 
     t = tcase_create("certification_trx_v3");
     tcase_add_test(t, test_certification_trx_v3);
-    suite_add_tcase(s, t);
-
-    t = tcase_create("certification_toi_v3");
-    tcase_add_test(t, test_certification_toi_v3);
+    tcase_add_test(t, test_certification_trx_v3E);
     suite_add_tcase(s, t);
 
     t = tcase_create("certification_trx_different_level_v3");
     tcase_add_test(t, test_certification_trx_different_level_v3);
+    tcase_add_test(t, test_certification_trx_different_level_v3E);
     suite_add_tcase(s, t);
 
     t = tcase_create("certification_toi_v3");
     tcase_add_test(t, test_certification_toi_v3);
+    tcase_add_test(t, test_certification_toi_v3E);
     suite_add_tcase(s, t);
 
     t = tcase_create("certification_nbo");
     tcase_add_test(t, test_certification_nbo);
+    tcase_add_test(t, test_certification_nboE);
+    suite_add_tcase(s, t);
 
     t = tcase_create("certification_commit_fragment");
     tcase_add_test(t, test_certification_commit_fragment);
-
+    tcase_add_test(t, test_certification_commit_fragmentE);
     suite_add_tcase(s, t);
 
     return s;

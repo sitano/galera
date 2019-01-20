@@ -589,6 +589,7 @@ galera::NBOEntry copy_ts(
         (static_cast<const gu::byte_t*>
          (gcache.get_ro_plaintext(ts->action().first)));
     std::copy(plaintext, plaintext + ts->action().second, buf->begin());
+    gcache.drop_plaintext(ts->action().first);
 
     galera::TrxHandleSlaveDeleter d;
     gu::shared_ptr<galera::TrxHandleSlave>::type new_ts(

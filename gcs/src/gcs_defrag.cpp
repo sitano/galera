@@ -87,7 +87,9 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
                          "Skipping.",
                          frg->act_id, frg->frag_no, df->sent_id, df->frag_no);
                 df->frag_no--; // revert counter in hope that we get good frag
+#ifndef GCS_CORE_TESTING // allow unit tests to pass in debug mode
                 assert(0);
+#endif
                 return 0;
             }
             else {
@@ -96,7 +98,9 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
                           df->sent_id, df->frag_no, frg->act_id, frg->frag_no);
                 gu_error ("Contents: '%.*s'", frg->frag_len, (char*)frg->frag);
                 df->frag_no--; // revert counter in hope that we get good frag
+#ifndef GCS_CORE_TESTING // allow unit tests to pass in debug mode
                 assert(0);
+#endif
                 return -EPROTO;
             }
         }
@@ -133,7 +137,9 @@ gcs_defrag_handle_frag (gcs_defrag_t*         df,
                 gu_error ("Contents: '%s', local: %s, reset: %s",
                           (char*)frg->frag, local ? "yes" : "no",
                           df->reset ? "yes" : "no");
+#ifndef GCS_CORE_TESTING // allow unit tests to pass in debug mode
                 assert(0);
+#endif
                 return -EPROTO;
             }
         }

@@ -87,6 +87,20 @@ namespace gcache
         Page::EncKey k(ptr, ptr + key.len);
         ps.set_enc_key(k);
     }
+
+    std::string GCache::meta(const void* ptr)
+    {
+        std::ostringstream os;
+        if (encrypt_cache)
+        {
+            ps.meta(ptr, os);
+        }
+        else
+        {
+            os << ptr2BH(ptr);
+        }
+        return os.str();
+    }
 }
 
 #include "gcache.h"

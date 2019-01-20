@@ -53,7 +53,7 @@ namespace galera
             wsrep_seqno_t      last()  const { return last_;   }
             wsrep_seqno_t      preload_start() const { return preload_start_; }
             AsyncSenderMap&    asmap()  { return asmap_;  }
-            gu_thread_t          thread() { return thread_; }
+            gu_thread_t        thread() { return thread_; }
 
         private:
 
@@ -541,7 +541,7 @@ void galera::ist::Receiver::run()
             }
         }
 
-        progress->finish();
+        if (progress /* IST actually started */) progress->finish();
     }
     catch (asio::system_error& e)
     {
@@ -810,74 +810,75 @@ void galera::ist::Sender::send(wsrep_seqno_t first, wsrep_seqno_t last,
                 << "IST handshake failed, peer reported error: " << ctrl;
         }
 
-        // send eof even if the set or transactions sent would be empty
-        if (first > last || (first == 0 && last == 0))
-        {
-            log_info << "IST sender notifying joiner, not sending anything";
-            if (use_ssl_ == true)
-            {
-                send_eof(p, *ssl_stream_);
-            }
-            else
-            {
-                send_eof(p, socket_);
-            }
-            return;
-        }
-        else
+        if (!(first > last || (first == 0 && last == 0)))
         {
             log_info << "IST sender " << first << " -> " << last;
-        }
 
-        std::vector<gcache::GCache::Buffer> buf_vec(
-            std::min(static_cast<size_t>(last - first + 1),
-                     static_cast<size_t>(1024)));
-        ssize_t n_read;
-        while ((n_read = gcache_.seqno_get_buffers(buf_vec, first)) > 0)
-        {
-            GU_DBUG_SYNC_WAIT("ist_sender_send_after_get_buffers");
-            //log_info << "read " << first << " + " << n_read << " from gcache";
-            for (wsrep_seqno_t i(0); i < n_read; ++i)
+            std::vector<gcache::GCache::Buffer> buf_vec(
+                std::min(static_cast<size_t>(last - first + 1),
+                         static_cast<size_t>(1024)));
+            ssize_t n_read;
+            while ((n_read = gcache_.seqno_get_buffers(buf_vec, first)) > 0)
             {
-                // Preload start is the seqno of the lowest trx in
-                // cert index at CC. If the cert index was completely
-                // reset, preload_start will be zero and no preload flag
-                // should be set.
-                bool preload_flag(preload_start > 0 &&
-                                  buf_vec[i].seqno_g() >= preload_start);
-                //log_info << "Sender::send(): seqno " << buf_vec[i].seqno_g()
-                //         << ", size " << buf_vec[i].size() << ", preload: "
-                //         << preload_flag;
-                if (use_ssl_ == true)
+                GU_DBUG_SYNC_WAIT("ist_sender_send_after_get_buffers");
+                //log_info << "read " << first << " + " << n_read
+                //         << " from gcache";
+                for (wsrep_seqno_t i(0); i < n_read; ++i)
                 {
-                    p.send_ordered(*ssl_stream_, buf_vec[i], preload_flag);
-                }
-                else
-                {
-                    p.send_ordered(socket_, buf_vec[i], preload_flag);
-                }
-
-                if (buf_vec[i].seqno_g() == last)
-                {
+                    // Preload start is the seqno of the lowest trx in
+                    // cert index at CC. If the cert index was completely
+                    // reset, preload_start will be zero and no preload flag
+                    // should be set.
+                    bool preload_flag(preload_start > 0 &&
+                                      buf_vec[i].seqno_g() >= preload_start);
+                    //log_info << "Sender::send(): seqno " <<buf_vec[i].seqno_g()
+                    //         << ", size " << buf_vec[i].size() << ", preload: "
+                    //         << preload_flag;
                     if (use_ssl_ == true)
                     {
-                        send_eof(p, *ssl_stream_);
+                        p.send_ordered(*ssl_stream_, buf_vec[i], preload_flag);
                     }
                     else
                     {
-                        send_eof(p, socket_);
+                        p.send_ordered(socket_, buf_vec[i], preload_flag);
                     }
-                    return;
+
+                    if (buf_vec[i].seqno_g() == last) break;
+                }
+                first += n_read;
+
+                if (first > last) break;
+
+                // resize buf_vec to avoid scanning gcache past last
+                size_t next_size(std::min(static_cast<size_t>(last - first + 1),
+                                          static_cast<size_t>(1024)));
+                if (buf_vec.size() != next_size)
+                {
+                    buf_vec.resize(next_size);
                 }
             }
-            first += n_read;
-            // resize buf_vec to avoid scanning gcache past last
-            size_t next_size(std::min(static_cast<size_t>(last - first + 1),
-                                      static_cast<size_t>(1024)));
-            if (buf_vec.size() != next_size)
+            assert(n_read >= 0);
+
+            if (first != last + 1)
             {
-                buf_vec.resize(next_size);
+                log_warn << "Could not find all writests ["
+                         << first << ", " << last
+                         << "] from cache. IST sending can't continue.";
+                assert(first <= last);
             }
+        }
+        else
+        {
+            log_info << "IST sender notifying joiner, not sending anything";
+        }
+
+        if (use_ssl_ == true)
+        {
+            send_eof(p, *ssl_stream_);
+        }
+        else
+        {
+            send_eof(p, socket_);
         }
     }
     catch (asio::system_error& e)
@@ -887,8 +888,6 @@ void galera::ist::Sender::send(wsrep_seqno_t first, wsrep_seqno_t last,
                                          << "'";
     }
 }
-
-
 
 
 extern "C"

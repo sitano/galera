@@ -159,9 +159,10 @@ START_TEST(test_states_slave)
 }
 END_TEST
 
-START_TEST(test_serialization)
+static void
+serialization(bool const enc)
 {
-    TestEnv env("trx_serialization");
+    TestEnv env("trx_serialization", enc);
     TrxHandleMaster::Pool lp(4096, 16, "serialization_lp");
     TrxHandleSlave::Pool  sp(sizeof(TrxHandleSlave), 16, "serialization_sp");
 
@@ -188,6 +189,17 @@ START_TEST(test_serialization)
         fail_if(txs1->local_seqno()  != act.seqno_l);
     }
 }
+
+START_TEST(test_serialization)
+{
+    serialization(false);
+}
+END_TEST
+
+START_TEST(test_serializationE)
+{
+    serialization(true);
+}
 END_TEST
 
 static enum wsrep_cb_status
@@ -212,9 +224,10 @@ apply_cb(
     return WSREP_CB_SUCCESS;
 }
 
-START_TEST(test_streaming)
+static void
+streaming(bool const enc)
 {
-    TestEnv env("trx_streaming");
+    TestEnv env("trx_streaming", enc);
     TrxHandleMaster::Pool lp(4096, 16, "streaming_lp");
     TrxHandleSlave::Pool  sp(sizeof(TrxHandleSlave), 16, "streaming_sp");
 
@@ -309,6 +322,17 @@ START_TEST(test_streaming)
 
     fail_if(res != src);
 }
+
+START_TEST(test_streaming)
+{
+    streaming(false);
+}
+END_TEST
+
+START_TEST(test_streamingE)
+{
+    streaming(true);
+}
 END_TEST
 
 Suite* trx_handle_suite()
@@ -327,10 +351,12 @@ Suite* trx_handle_suite()
 
     tc = tcase_create("test_serialization");
     tcase_add_test(tc, test_serialization);
+    tcase_add_test(tc, test_serializationE);
     suite_add_tcase(s, tc);
 
     tc = tcase_create("test_streaming");
     tcase_add_test(tc, test_streaming);
+    tcase_add_test(tc, test_streamingE);
     suite_add_tcase(s, tc);
 
     return s;
