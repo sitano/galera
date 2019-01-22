@@ -2421,8 +2421,7 @@ galera::ReplicatorSMM::process_conf_change(void*                    recv_ctx,
     static int const ORDERED_CC = 10; /* repl protocol version which orders CC */
     assert(cc.seqno_l > -1);
 
-    gcs_act_cchange const conf
-        (gcache_.get_ro_plaintext(cc.buf), cc.size);
+    gcs_act_cchange const conf(gcache_.get_ro_plaintext(cc.buf), cc.size);
     /* no need to drop plaintext - it shall be freed() below */
 
     bool const from_IST(0 == cc.seqno_l);

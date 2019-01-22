@@ -1968,6 +1968,8 @@ long gcs_request_state_transfer (gcs_conn_t*    conn,
             assert (action.buf != rst);
 #ifndef GCS_FOR_GARB
             assert (action.buf != NULL);
+            // first need to increment ref count
+            gcs_gcache_get_ro_plaintext(conn->gcache, action.buf);
             gcs_gcache_free (conn->gcache, action.buf);
 #else
             assert (action.buf == NULL);

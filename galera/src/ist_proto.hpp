@@ -701,9 +701,11 @@ namespace galera
                             void* const ptr(gcache_.malloc(wsize, ptx));
                             ssize_t const r
                                 (asio::read(socket, asio::buffer(ptx, wsize)));
-                            /* since IST events are normally processed right
-                             * away, allow plaintext to linger until the event
-                             * is done with and free()'d */
+                            /* Since IST events are normally processed right
+                             * away, we want the plaintext to linger until the
+                             * event is done with and free()'d, so not dropping
+                             * plaintext here, but it will require additional
+                             * refcount decrement before freeing. */
 
                             if (gu_unlikely(r != wsize))
                             {

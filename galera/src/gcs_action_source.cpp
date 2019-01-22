@@ -182,8 +182,7 @@ ssize_t galera::GcsActionSource::process(void* recv_ctx, bool& exit_loop)
         try { gu_trace(dispatch(recv_ctx, act, exit_loop)); }
         catch (gu::Exception& e)
         {
-            log_error << "Failed to process action " << act << ": "
-                      << e.what();
+            log_error << "Failed to process action " << act << ": " << e.what();
             rc = -e.get_errno();
         }
     }

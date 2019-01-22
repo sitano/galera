@@ -516,6 +516,7 @@ void galera::ist::Receiver::run()
                 if (act.size > 0)
                 {
                     gu_trace(ts->unserialize<false>(gcache_, act));
+                    gcache_.drop_plaintext(act.buf); // see p.recv_ordered()
                     ts->set_local(false);
                     assert(ts->global_seqno() == act.seqno_g);
                     assert(ts->depends_seqno() >= 0 || ts->nbo_end());
