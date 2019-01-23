@@ -487,7 +487,15 @@ gcache::PageStore::get_plaintext(const void* ptr, bool const writable)
         p.page_->xcrypt(encrypt_cb_, app_ctx_, ptr2BH(ptr), p.ptx_,p.alloc_size_,
                         WSREP_DEC);
 
-        assert(0 == ::memcmp(p.ptx_, &p.bh_, sizeof(p.bh_)));
+        // make sure buffer headers agree
+        assert(p.ptx_->seqno_g == p.bh_.seqno_g);
+        assert(p.ptx_->ctx     == p.bh_.ctx);
+        assert(p.ptx_->size    == p.bh_.size);
+        assert(p.ptx_->store   == p.bh_.store);
+        assert(p.ptx_->type    == p.bh_.type);
+
+        // mask released flag since it can differ after repossession
+        assert((p.ptx_->flags|BUFFER_RELEASED) == (p.bh_.flags|BUFFER_RELEASED));
     }
 
     p.changed_ = p.changed_ || writable;
@@ -505,10 +513,18 @@ gcache::PageStore::drop_plaintext(PlainMap::iterator const i,
 
     Plain& p(i->second);
     assert(p.page_);
-    assert(p.ptx_);
 
-    assert(p.ref_count_ > 0);
-    p.ref_count_--;
+    if (p.ref_count_ > 0)
+    {
+        assert(p.ptx_);
+        p.ref_count_--;
+    }
+    else
+    {
+        /* allow freeing of unreferenced buffers to avoid unnecessary lookups
+         * and potential decryption overhead */
+        assert(free);
+    }
 
     assert(false == p.freed_ || false == free); /* can free only once */
     p.freed_ = p.freed_ || free;
@@ -520,6 +536,8 @@ gcache::PageStore::drop_plaintext(PlainMap::iterator const i,
     {
         if (p.changed_)
         {
+            assert(p.ptx_);
+
             /* update buffer header in ptx_ */
             *p.ptx_ = p.bh_;
 
@@ -536,7 +554,7 @@ gcache::PageStore::drop_plaintext(PlainMap::iterator const i,
 }
 
 void
-gcache::PageStore::repossess(BufferHeader* bh)
+gcache::PageStore::repossess(BufferHeader* bh, const void* ptr)
 {
     assert(BH_is_released(bh)); // will be changed by the caller
 
@@ -547,7 +565,7 @@ gcache::PageStore::repossess(BufferHeader* bh)
     /* don't increment reference counter or decrypt ciphertext - this method
        is not to acquire resource, it is to reverse the effects of free() */
 
-    p.page_->repossess(bh);
+    p.page_->repossess(bh, ptr);
 }
 
 void

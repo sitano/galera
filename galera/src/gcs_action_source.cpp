@@ -188,7 +188,6 @@ ssize_t galera::GcsActionSource::process(void* recv_ctx, bool& exit_loop)
     }
     else if (rc > 0 && skip)
     {
-        if (act.in_cache()) gcache_.get_ro_plaintext(act.buf); // inc. refcount
         replicator_.cancel_seqnos(act.seqno_l, act.seqno_g);
     }
     else

@@ -101,10 +101,14 @@ namespace gcache
 
         void  free    (BufferHeader* bh) { free(bh, NULL); }
 
-        void  repossess(BufferHeader* bh)
+        void  repossess(BufferHeader* bh, const void* ptr)
         {
-            assert(bh >= mmap_.ptr);
-            assert(BH_next(bh) <= BH_cast(next_));
+            if (ptr)
+            {
+                assert(ptr >= mmap_.ptr);
+                assert(static_cast<const uint8_t*>(ptr) + aligned_size(bh->size)
+                       <= next_);
+            }
             assert(bh->size >= sizeof(BufferHeader));
             assert(bh->seqno_g >= 0);
             assert(bh->store == BUFFER_IN_PAGE);
@@ -114,6 +118,8 @@ namespace gcache
             if (debug_) { log_info << name() << " repossessed " << bh; }
 #endif
         }
+
+        void  repossess(BufferHeader* bh) { assert(0); repossess(bh, NULL); }
 
         void discard (BufferHeader* bh)
         {
@@ -185,13 +191,6 @@ namespace gcache
 
         GU_COMPILE_ASSERT(ALIGNMENT % GU_MIN_ALIGNMENT == 0,
                           page_alignment_is_not_multiple_of_min_alignment);
-
-        static inline BufferHeader*
-        BH_next(BufferHeader* bh)
-        {
-            return BH_cast(reinterpret_cast<uint8_t*>(bh) +
-                           aligned_size(bh->size));
-        }
 
         inline uint8_t*
         start() { return static_cast<uint8_t*>(mmap_.ptr); }

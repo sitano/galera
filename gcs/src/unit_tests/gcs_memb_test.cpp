@@ -328,7 +328,6 @@ group_sst_start (struct group* group, int const src_idx, const char* donor)
         if (i == src_idx) {
             fail_if (ret != req_len);
             // passed to joiner
-            group->nodes[i]->group.gcache()->get_ro_plaintext(req_buf);
             group->nodes[i]->group.gcache()->free(req_buf); // discarded
         }
         else {

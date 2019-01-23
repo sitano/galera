@@ -296,7 +296,7 @@ namespace gcache
             {
             case BUFFER_IN_MEM:  mem.repossess(bh); break;
             case BUFFER_IN_RB:   rb.repossess (bh); break;
-            case BUFFER_IN_PAGE: ps.repossess (bh); break;
+            case BUFFER_IN_PAGE: ps.repossess (bh, ptr); break;
             default: assert(0);
             }
 

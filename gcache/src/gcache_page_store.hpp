@@ -69,7 +69,8 @@ namespace gcache
             return &(p.bh_);
         }
 
-        void  repossess(BufferHeader* bh);
+        void  repossess(BufferHeader* bh, const void* ptr);
+        void  repossess(BufferHeader* bh) { assert(0); repossess(bh, NULL); }
 
         void  discard (BufferHeader* bh, const void* ptr)
         {
