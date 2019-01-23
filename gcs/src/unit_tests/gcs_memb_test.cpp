@@ -304,6 +304,10 @@ group_sst_start (struct group* group, int const src_idx, const char* donor)
         fail_if (NULL == req_buf);
         fail_if (NULL == req_ptx);
         sprintf (static_cast<char*>(req_ptx), "%s", donor);
+        mark_point();
+        group->nodes[i]->group.gcache()->drop_plaintext(req_buf);
+
+        /* slave queue */
 
         struct gcs_act_rcvd req(
             gcs_act(req_buf, req_len, GCS_ACT_STATE_REQ),
@@ -323,15 +327,19 @@ group_sst_start (struct group* group, int const src_idx, const char* donor)
 
         if (i == src_idx) {
             fail_if (ret != req_len);
-            group->nodes[i]->group.gcache()->free(req_buf); // passed to joiner
+            // passed to joiner
+            group->nodes[i]->group.gcache()->get_ro_plaintext(req_buf);
+            group->nodes[i]->group.gcache()->free(req_buf); // discarded
         }
         else {
             if (ret > 0) {
                 if (donor_idx < 0) {
                     fail_if (req.id != i);
                     donor_idx = i;
-                    group->nodes[i]->group.gcache()->free(req_buf);
                     // passed to donor
+                    group->nodes[i]->group.gcache()->get_ro_plaintext(req_buf);
+                    // parsed
+                    group->nodes[i]->group.gcache()->free(req_buf);
                 }
                 else {
                     fail_if(true,

@@ -328,6 +328,8 @@ gcs_core_send (gcs_core_t*          const conn,
 
     assert (action != NULL);
     assert (act_size > 0);
+    /* actions passing this way will be put in cache */
+    assert (gcs_act_in_cache(act_type));
 
     /*
      * Action header will be replicated with every message.

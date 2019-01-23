@@ -1656,7 +1656,7 @@ group_select_donor (gcs_group_t* group,
 void
 gcs_group_ignore_action (gcs_group_t* group, struct gcs_act_rcvd* act)
 {
-    if (act->act.type <= GCS_ACT_CCHANGE) {
+    if (gcs_act_in_cache(act->act.type)) {
         gcs_gcache_free (group->cache, act->act.buf);
     }
 
@@ -1710,7 +1710,6 @@ gcs_group_handle_state_request (gcs_group_t*         group,
         catch (gu::Exception& e) {
             log_warn << "Malformed state transfer request: " << e.what()
                      << " Ignoring";
-            gcs_gcache_drop_plaintext(group->cache, act->act.buf);
             gcs_group_ignore_action(group, act);
             return 0;
         }
@@ -1740,7 +1739,6 @@ gcs_group_handle_state_request (gcs_group_t*         group,
                       "but its state is %s. Ignoring.",
                       joiner_idx, group->nodes[joiner_idx].segment, joiner_name,
                       joiner_status_string);
-            gcs_gcache_drop_plaintext(group->cache, act->act.buf);
             gcs_group_ignore_action (group, act);
             return 0;
         }
@@ -1754,7 +1752,6 @@ gcs_group_handle_state_request (gcs_group_t*         group,
 
     if (group->my_idx != joiner_idx && group->my_idx != donor_idx) {
         // if neither DONOR nor JOINER, ignore request
-        gcs_gcache_drop_plaintext(group->cache, act->act.buf);
         gcs_group_ignore_action (group, act);
         return 0;
     }

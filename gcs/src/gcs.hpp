@@ -162,6 +162,13 @@ typedef enum gcs_act_type
 }
 gcs_act_type_t;
 
+/*! returns true if action must be in cache */
+static inline bool
+gcs_act_in_cache(gcs_act_type_t const t)
+{
+    return t <= GCS_ACT_CCHANGE && t != GCS_ACT_COMMIT_CUT;
+}
+
 #define GCS_VOTE_REQUEST 1 /* vote request indicator */
 
 /*! String representations of action types */
@@ -206,6 +213,8 @@ struct gcs_action {
     const void*    buf; /*! unlike input, output goes as a single buffer */
     int32_t        size;
     gcs_act_type_t type;
+
+    bool in_cache() const { return gcs_act_in_cache(type); }
 };
 
 std::ostream& operator <<(std::ostream& os, const gcs_action& act);

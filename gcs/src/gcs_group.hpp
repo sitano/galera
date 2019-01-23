@@ -172,6 +172,7 @@ gcs_group_handle_act_msg (gcs_group_t*          const group,
     assert (sender_idx < group->num);
     assert (frg->act_id > 0);
     assert (frg->act_size > 0);
+    assert (gcs_act_in_cache(frg->act_type));
 
     // clear reset flag if set by own first fragment after reset flag was set
     group->frag_reset = (group->frag_reset &&
