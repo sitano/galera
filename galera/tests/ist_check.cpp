@@ -208,11 +208,9 @@ namespace
             seqno_ = ts->global_seqno();
         }
 
-        void ist_cc(const gcs_action& act, bool must_apply, bool preload)
+        void ist_cc(const gcs_act_cchange& cc, const gcs_action& act,
+                    bool must_apply, bool preload)
         {
-            const void* ptx(gcache_.get_ro_plaintext(act.buf));
-            gcs_act_cchange const cc(ptx, act.size);
-            gcache_.drop_plaintext(act.buf);
             assert(act.seqno_g == cc.seqno);
 
             log_info << "ist_cc" << cc.seqno;

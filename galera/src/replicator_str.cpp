@@ -1214,15 +1214,14 @@ void ReplicatorSMM::ist_end(int error)
     ist_event_queue_.eof(error);
 }
 
-void ReplicatorSMM::ist_cc(const gcs_action& act, bool must_apply,
-                           bool preload)
+void ReplicatorSMM::ist_cc(const gcs_act_cchange& conf,
+                           const gcs_action&      act,
+                           bool const             must_apply,
+                           bool const             preload)
 {
     assert(GCS_ACT_CCHANGE == act.type);
     assert(act.seqno_g > 0);
     //log_info << "~~~~~ preprocessing CC " << act.seqno_g;
-
-    gcs_act_cchange const conf(gcache_.get_ro_plaintext(act.buf), act.size);
-    gcache_.drop_plaintext(act.buf); // see Proto::recv_ordered()
 
     assert(conf.conf_id >= 0); // Primary configuration
     assert(conf.seqno == act.seqno_g);
@@ -1234,7 +1233,7 @@ void ReplicatorSMM::ist_cc(const gcs_action& act, bool must_apply,
 
     if (must_apply == true)
     {
-        process_conf_change(0, act);
+        process_conf_change(0, conf, act);
         /* TO monitors need to be entered here to maintain critical
          * section over passing the view through the event queue to
          * an applier and ensure that the view is submitted in isolation.

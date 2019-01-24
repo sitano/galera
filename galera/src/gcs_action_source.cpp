@@ -121,8 +121,11 @@ void galera::GcsActionSource::dispatch(void* const              recv_ctx,
         break;
     }
     case GCS_ACT_CCHANGE:
-        gu_trace(replicator_.process_conf_change(recv_ctx, act));
+    {
+        gcs_act_cchange const conf(gcache_.get_ro_plaintext(act.buf), act.size);
+        gu_trace(replicator_.process_conf_change(recv_ctx, conf, act));
         break;
+    }
     case GCS_ACT_STATE_REQ:
         gu_trace(replicator_.process_state_req(recv_ctx, act.buf, act.size,
                                                act.seqno_l, act.seqno_g));

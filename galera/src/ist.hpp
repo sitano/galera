@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2011-2017 Codership Oy <info@codership.com>
+// Copyright (C) 2011-2019 Codership Oy <info@codership.com>
 //
 
 
@@ -37,8 +37,8 @@ namespace galera
             virtual void ist_trx(const TrxHandleSlavePtr&, bool must_apply,
                                  bool preload) = 0;
             // Process conf change from IST
-            virtual void ist_cc(const gcs_action&, bool must_apply,
-                                bool preload) = 0;
+            virtual void ist_cc(const gcs_act_cchange&,const gcs_action&,
+                                bool must_apply, bool preload) = 0;
             // Report IST end
             virtual void ist_end(int error) = 0;
         protected:

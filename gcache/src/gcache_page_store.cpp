@@ -317,7 +317,7 @@ gcache::PageStore::~PageStore ()
         if (debug_)
             for (PageQueue::iterator i(pages_.begin()); i != pages_.end(); ++i)
             {
-                log_warn << *(*i);
+                log_info << *(*i);
             }
     }
     else if (debug_ && pages_.size() > 0 )

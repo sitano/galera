@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2010-2017 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 #ifndef GALERA_REPLICATOR_HPP
@@ -109,7 +109,8 @@ namespace galera
         virtual void process_commit_cut(wsrep_seqno_t seq,
                                         wsrep_seqno_t seqno_l) = 0;
         virtual void process_conf_change(void*                    recv_ctx,
-                                         const struct gcs_action& cc) = 0;
+                                         const gcs_act_cchange&   cc,
+                                         const struct gcs_action& act) = 0;
         virtual void process_state_req(void* recv_ctx, const void* req,
                                        size_t req_size,
                                        wsrep_seqno_t seqno_l,

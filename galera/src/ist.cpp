@@ -516,7 +516,7 @@ void galera::ist::Receiver::run()
                 if (act.size > 0)
                 {
                     gu_trace(ts->unserialize<false>(gcache_, act));
-                    gcache_.drop_plaintext(act.buf); // see p.recv_ordered()
+                    gcache_.drop_plaintext(act.buf); // see Proto::recv_ordered()
                     ts->set_local(false);
                     assert(ts->global_seqno() == act.seqno_g);
                     assert(ts->depends_seqno() >= 0 || ts->nbo_end());
@@ -534,9 +534,14 @@ void galera::ist::Receiver::run()
                 break;
             }
             case GCS_ACT_CCHANGE:
+            {
                 //log_info << "####### Passing CC " << act.seqno_g;
-                handler_.ist_cc(act, must_apply, preload);
+                gcs_act_cchange const cc
+                    (gcache_.get_ro_plaintext(act.buf), act.size);
+                gcache_.drop_plaintext(act.buf); // see Proto::recv_ordered()
+                handler_.ist_cc(cc, act, must_apply, preload);
                 break;
+            }
             default:
                 assert(0);
             }

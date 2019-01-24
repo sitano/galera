@@ -141,7 +141,9 @@ namespace galera
         void process_trx(void* recv_ctx, const TrxHandleSlavePtr& trx);
         void process_commit_cut(wsrep_seqno_t seq, wsrep_seqno_t seqno_l);
         void submit_view_info(void* recv_ctx, const wsrep_view_info_t* cc);
-        void process_conf_change(void* recv_ctx, const struct gcs_action& cc);
+        void process_conf_change(void*                    recv_ctx,
+                                 const gcs_act_cchange&   cc,
+                                 const struct gcs_action& act);
         void process_state_req(void* recv_ctx, const void* req,
                                size_t req_size, wsrep_seqno_t seqno_l,
                                wsrep_seqno_t donor_seq);
@@ -179,7 +181,8 @@ namespace galera
         // IST Action handler interface
         void ist_trx(const TrxHandleSlavePtr& ts, bool must_apply,
                      bool preload);
-        void ist_cc(const gcs_action&, bool must_apply, bool preload);
+        void ist_cc(const gcs_act_cchange&, const gcs_action&, bool must_apply,
+                    bool preload);
         void ist_end(int error);
 
         // Enter apply monitor without waiting

@@ -2416,13 +2416,11 @@ galera::ReplicatorSMM::submit_view_info(void*                    recv_ctx,
 
 void
 galera::ReplicatorSMM::process_conf_change(void*                    recv_ctx,
+                                           const gcs_act_cchange&   conf,
                                            const struct gcs_action& cc)
 {
     static int const ORDERED_CC = 10; /* repl protocol version which orders CC */
     assert(cc.seqno_l > -1);
-
-    gcs_act_cchange const conf(gcache_.get_ro_plaintext(cc.buf), cc.size);
-    /* no need to drop plaintext - it shall be freed() below */
 
     bool const from_IST(0 == cc.seqno_l);
     bool const ordered(conf.repl_proto_ver >= ORDERED_CC);
