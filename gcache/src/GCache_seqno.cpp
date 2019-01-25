@@ -65,6 +65,16 @@ namespace gcache
         assert (seqno_g > 0);
         assert (!BH_is_released(bh));
 
+#ifndef NDEBUG
+        seqno_t const off(seqno_g - seqno_max);
+        if (off != 1 && params.debug())
+        {
+            log_info << "GCache::seqno_assign(seqno: " << seqno_g
+                     << ", type: " << int(type) << ", skip: "
+                     << (skip ? "yes)" : "no)") << " with offset " << off;
+        }
+#endif
+
         if (gu_likely(seqno_g > seqno_max))
         {
             seqno2ptr.insert(seqno2ptr.end(), seqno2ptr_pair_t(seqno_g, ptr));
@@ -207,7 +217,7 @@ namespace gcache
                 BufferHeader* const bh(get_BH(it->second));
                 assert (bh->seqno_g == it->first);
 #ifndef NDEBUG
-                if (!(seqno_released < it->first ||
+                if (!(seqno_released + 1 == it->first ||
                       seqno_released == SEQNO_NONE))
                 {
                     log_info << "seqno_released: " << seqno_released
@@ -218,9 +228,23 @@ namespace gcache
                              << new_gap << "; seqno_max: " << seqno_max;
                     assert(seqno_released < it->first ||
                            seqno_released == SEQNO_NONE);
+                    return;
                 }
 #endif
-                if (gu_likely(!BH_is_released(bh))) free_common(bh, it->second);
+                if (gu_likely(!BH_is_released(bh)))
+                {
+                    free_common(bh, it->second);
+                }
+                else
+                {
+#ifndef NDEBUG
+                    log_info << "GCache::seqno_release(" << seqno
+                             << "): unexpectedly released buffer: " << bh;
+                    assert(seqno_released + 1 == it->first);
+                    assert(0);
+#endif
+                    seqno_released = it->first;
+                }
             }
 
             assert (loop || seqno == seqno_released);
