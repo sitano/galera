@@ -140,7 +140,9 @@ gcache::Page::malloc (size_type size)
         assert (next_ <= start() + mmap_.size);
         if (debug_)
         {
-            log_info << name() << " allocd " << size << '/' << alloc_size;
+            const void* const ptr(static_cast<BufferHeader*>(ret) + 1);
+            log_info << name() << " allocd ptr: " << ptr
+                     << ", size: " << size << '/' << alloc_size;
             log_info << name() << " incremented ref count to " << used_;
         }
 #endif

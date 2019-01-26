@@ -82,7 +82,8 @@ namespace gcache
         }
         else
         {
-            // this should never happen. seqnos should be assinged in TO.
+            // this can happen during IST when some writesets have been
+            // discarded and need to be reallocated again.
             const std::pair<seqno2ptr_iter_t, bool>& res(
                 seqno2ptr.insert (seqno2ptr_pair_t(seqno_g, ptr)));
 
@@ -93,6 +94,8 @@ namespace gcache
                                <<". New ptr = " << ptr << ", previous ptr = "
                                << res.first->second;
             }
+
+            seqno_released = std::min(seqno_released, seqno_g - 1);
         }
 
         bh->seqno_g = seqno_g;
