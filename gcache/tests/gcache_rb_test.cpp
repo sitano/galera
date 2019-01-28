@@ -17,7 +17,6 @@ using namespace gcache;
 
 static gu::UUID    const GID(NULL, 0);
 static std::string const RB_NAME("rb_test");
-static size_t      const BH_SIZE(sizeof(gcache::BufferHeader));
 
 typedef MemOps::size_type size_type;
 

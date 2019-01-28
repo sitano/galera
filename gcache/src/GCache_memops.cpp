@@ -59,69 +59,71 @@ namespace gcache
         return true;
     }
 
+    class DiscardCond
+    {
+        size_t const upto_;
+        size_t       done_;
+    public:
+        DiscardCond(size_t s) : upto_(s), done_(0) {}
+        bool check() const { return done_ < upto_; }
+        void update(const BufferHeader* bh) { done_ += bh->size; }
+        /* bh->size is actually a conservative freed estimate due to
+         * store buffer alignment, which is different for each store
+         * type. However it is not necessary to be exact here. Were are
+         * just trying to discard some buffers because there are too many
+         * allocated */
+        void debug_begin()
+        {
+            log_info << "GCache::discard_size(" << upto_ << ")";
+        }
+        void debug_fail()
+        {
+            log_info << "GCache::discard_size() can't discard "
+                     << (upto_ - done_) << ", bailing out.";
+        }
+    };
+
     bool
     GCache::discard_size(size_t const size)
     {
-        class Cond
-        {
-            size_t const upto_;
-            size_t       done_;
-        public:
-            Cond(size_t s) : upto_(s), done_(0) {}
-            bool check() const { return done_ < upto_; }
-            void update(const BufferHeader* bh) { done_ += bh->size; }
-            /* bh->size is actually a conservative freed estimate due to
-             * store buffer alignment, which is different for each store
-             * type. However it is not necessary to be exact here. Were are
-             * just trying to discard some buffers because there are too many
-             * allocated */
-            void debug_begin()
-            {
-                log_info << "GCache::discard_size(" << upto_ << ")";
-            }
-            void debug_fail()
-            {
-                log_info << "GCache::discard_size() can't discard "
-                         << (upto_ - done_) << ", bailing out.";
-            }
-        }
-        cond(size);
-
+        DiscardCond cond(size);
         return discard<>(cond);
     }
+
+    class DiscardSeqnoCond
+    {
+        seqno_t const upto_;
+        seqno_t       done_;
+    public:
+        DiscardSeqnoCond(seqno_t start, seqno_t end)
+            : upto_(end), done_(start - 1) {}
+        bool check() const { return done_ < upto_; }
+        void update(const BufferHeader* bh)
+        {
+            assert(done_ + 1 == bh->seqno_g);
+            done_ = bh->seqno_g;
+            }
+        void debug_begin()
+        {
+            log_info << "GCache::discard_seqno(" << done_ + 1 << " - "
+                     << upto_ << ")";
+        }
+        void debug_fail()
+        {
+            log_info << "GCache::discard_seqno(" << upto_ << "): "
+                     << done_ + 1 << " not released, bailing out.";
+        }
+    };
 
     bool
     GCache::discard_seqno (seqno_t seqno)
     {
-        class Cond
-        {
-            seqno_t const upto_;
-            seqno_t       done_;
-        public:
-            Cond(seqno_t start, seqno_t end) : upto_(end), done_(start - 1) {}
-            bool check() const { return done_ < upto_; }
-            void update(const BufferHeader* bh)
-            {
-                assert(done_ + 1 == bh->seqno_g);
-                done_ = bh->seqno_g;
-            }
-            void debug_begin()
-            {
-                log_info << "GCache::discard_seqno(" << done_ + 1 << " - "
-                         << upto_ << ")";
-            }
-            void debug_fail()
-            {
-                log_info << "GCache::discard_seqno(" << upto_ << "): "
-                             << done_ + 1 << " not released, bailing out.";
-            }
-        };
 
         seqno_t const start(seqno2ptr.begin() != seqno2ptr.end() ?
                             seqno2ptr.begin()->first : 0);
         assert(start > 0);
 
-        Cond cond(start, seqno);
+        DiscardSeqnoCond cond(start, seqno);
 
         return discard<>(cond);
     }

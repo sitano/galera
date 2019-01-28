@@ -171,8 +171,7 @@ namespace
     class ISTHandler : public galera::ist::EventHandler
     {
     public:
-        ISTHandler(gcache::GCache& gc) :
-            gcache_(gc),
+        ISTHandler() :
             mutex_(),
             cond_(),
             seqno_(0),
@@ -247,7 +246,6 @@ namespace
         wsrep_seqno_t seqno() const { return seqno_; }
 
     private:
-        gcache::GCache& gcache_;
         gu::Mutex mutex_;
         gu::Cond  cond_;
         wsrep_seqno_t seqno_;
@@ -270,7 +268,7 @@ extern "C" void* receiver_thd(void* arg)
     mark_point();
 
     conf.set(galera::ist::Receiver::RECV_ADDR, rargs->listen_addr_);
-    ISTHandler isth(rargs->gcache_);
+    ISTHandler isth;
     galera::ist::Receiver receiver(conf, rargs->gcache_, slave_pool,
                                    isth, 0);
 

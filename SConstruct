@@ -387,6 +387,16 @@ int main() { SSL_CTX* ctx=NULL; EC_KEY* ecdh=NULL; return !SSL_CTX_set_tmp_ecdh(
     context.Result(result)
     return result
 
+def CheckStdSeedSeq(context):
+    test_source = """
+#include <random>
+int main() { std::seed_seq seeds{1, 2}; }
+"""
+    context.Message('Checking for std::seed_seq ...')
+    result = context.TryLink(test_source, '.cpp')
+    context.Result(result)
+    return result
+
 #
 # Construct configuration context
 #
@@ -399,7 +409,8 @@ conf = Configure(env, custom_tests = {
     'CheckTr1UnorderedMap': CheckTr1UnorderedMap,
     'CheckWeffcpp': CheckWeffcpp,
     'CheckSetEcdhAuto': CheckSetEcdhAuto,
-    'CheckSetTmpEcdh': CheckSetTmpEcdh
+    'CheckSetTmpEcdh': CheckSetTmpEcdh,
+    'CheckStdSeedSeq': CheckStdSeedSeq
 })
 
 conf.env.Append(CPPPATH = [ '#/wsrep/src' ])
@@ -617,6 +628,10 @@ if conf.CheckSetEcdhAuto():
     conf.env.Append(CPPFLAGS = ' -DOPENSSL_HAS_SET_ECDH_AUTO')
 elif conf.CheckSetTmpEcdh():
     conf.env.Append(CPPFLAGS = ' -DOPENSSL_HAS_SET_TMP_ECDH')
+
+# STD library support
+if conf.CheckStdSeedSeq():
+    conf.env.Append(CPPFLAGS = ' -DHAVE_STD_SEED_SEQ')
 
 # these will be used only with our software
 if strict_build_flags == 1:

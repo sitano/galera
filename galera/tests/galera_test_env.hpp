@@ -69,7 +69,7 @@ namespace
                 }
             }
 
-            const std::string& name() const { return path_.native(); }
+            std::string name() const { return path_.string(); }
 
         } /* dedicated dir for test files */  path_;
 

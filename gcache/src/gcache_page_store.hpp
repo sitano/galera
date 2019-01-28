@@ -173,7 +173,7 @@ namespace gcache
             enc2plain_.erase(i);
         }
 
-        template <bool discard> void
+        template <bool Discard> void
         release(BufferHeader* bh, const void* ptr)
         {
             assert(BH_is_released(bh));
@@ -181,7 +181,7 @@ namespace gcache
 
             Page* page(static_cast<Page*>(BH_ctx(bh)));
 
-            if (discard)
+            if (Discard)
             {
                 page->discard(bh);
                 if (encrypt_cb_) discard_plaintext(find_plaintext(ptr));
@@ -203,7 +203,7 @@ namespace gcache
 
         Plain& bh2Plain(BufferHeader* bh)
         {
-            GU_COMPILE_ASSERT(std::is_standard_layout<Plain>::value,
+            GU_COMPILE_ASSERT(std::is_pod<Plain>::value,
                               Plain_is_not_standard_layout);
             return *(reinterpret_cast<Plain*>(reinterpret_cast<char*>(bh) -
                                               offsetof(Plain, bh_)));
