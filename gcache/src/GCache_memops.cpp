@@ -12,7 +12,6 @@ namespace gcache
     GCache::discard_buffer(BufferHeader* bh, const void* ptr)
     {
         assert(bh->seqno_g > 0);
-        bh->seqno_g = SEQNO_ILL; // will never be reused
 
         switch (bh->store)
         {

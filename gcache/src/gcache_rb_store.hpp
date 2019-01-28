@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
  */
 
 /*! @file ring buffer storage class */
@@ -52,9 +52,11 @@ namespace gcache
         void  discard (BufferHeader* const bh)
         {
             assert (BH_is_released(bh));
-            assert (SEQNO_ILL == bh->seqno_g);
             size_free_ += aligned_size(bh->size);
             assert (size_free_ <= size_cache_);
+            /* so we know that the buffer is no longer in the map and can be
+             * overwritten */
+            bh->seqno_g = SEQNO_ILL;
         }
 
         size_t size      () const { return size_cache_; }

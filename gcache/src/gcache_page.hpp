@@ -127,15 +127,15 @@ namespace gcache
 #ifndef NDEBUG
             if (debug_) { log_info << name() << " discarded " << bh; }
 #endif
+            assert(bh->seqno_g > 0); /* unordered buffers should be freed() */
             assert(used_ > 0);
-            if (bh->seqno_g > 0)
-            {
-                used_--;
+            used_--;
 #ifndef NDEBUG
-                if (debug_) { log_info << name() << " decremented ref count to "
-                                       << used_; }
-#endif
+            if (debug_)
+            {
+                log_info << name() << " decremented ref count to " << used_;
             }
+#endif
         }
 
         void xcrypt(wsrep_encrypt_cb_t    encrypt_cb,
