@@ -369,7 +369,7 @@ gcache::PageStore::malloc (size_type const size, void*& ptx)
 
     if (gu_likely(NULL != ptr))
     {
-        size_type alloc_size;
+        size_type alloc_size(0);
         if (encrypt_cb_) /* allocate corresponding plaintext buffer */
         {
             alloc_size = Page::aligned_size(size);
@@ -391,6 +391,7 @@ gcache::PageStore::malloc (size_type const size, void*& ptx)
 
         if (encrypt_cb_)
         {
+            assert(alloc_size > 0);
             Plain plain = {
                 current_,    // page_
                 bh,          // ptx_

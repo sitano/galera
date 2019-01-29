@@ -13,7 +13,7 @@ NAMESPACE_GCACHE_TEST_BEGIN
 
 class Encrypt
 {
-    static int const BLOCKSIZE = 16;
+    static size_t const BLOCKSIZE = 16;
     static_assert(BLOCKSIZE < sizeof(wsrep_enc_iv_t),
                   "blocksize bigger than IV");
     static_assert(0 == BLOCKSIZE % sizeof(size_t),

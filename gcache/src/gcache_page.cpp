@@ -25,17 +25,17 @@ gcache::Page::Nonce::Nonce() : d()
     std::random_device r;
     uint64_t const seed1(r());
 
-#ifdef HAVE_STD_SEED_SEQ
     /* just in case random_device implementation happens to be too
      * determenistic, add a seed based on time. */
     uint64_t const seed2(std::chrono::high_resolution_clock::now()
                          .time_since_epoch().count());
     assert(seed2 != 0);
 
+#ifdef HAVE_STD_SEED_SEQ
     std::seed_seq seeds{ seed1, seed2 };
     std::mt19937 rng(seeds);
 #else
-    std::mt19937 rng(seed1);
+    std::mt19937 rng(seed1 ^ seed2);
 #endif // HAVE_STD_SEED_SEQ
     for (size_t i(0); i < (sizeof(d.i)/sizeof(d.i[0])); ++i)
     {

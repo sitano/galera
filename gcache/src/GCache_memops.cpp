@@ -59,12 +59,12 @@ namespace gcache
         return true;
     }
 
-    class DiscardCond
+    class DiscardSizeCond
     {
         size_t const upto_;
         size_t       done_;
     public:
-        DiscardCond(size_t s) : upto_(s), done_(0) {}
+        DiscardSizeCond(size_t s) : upto_(s), done_(0) {}
         bool check() const { return done_ < upto_; }
         void update(const BufferHeader* bh) { done_ += bh->size; }
         /* bh->size is actually a conservative freed estimate due to
@@ -86,7 +86,7 @@ namespace gcache
     bool
     GCache::discard_size(size_t const size)
     {
-        DiscardCond cond(size);
+        DiscardSizeCond cond(size);
         return discard<>(cond);
     }
 
