@@ -347,7 +347,7 @@ END_TEST
 START_TEST(test_certification_nbo)
 {
     log_info << "START: test_certification_nbo";
-    const int version(4);
+    const int version(galera::WriteSetNG::VER5);
     using galera::Certification;
     using galera::TrxHandle;
     using galera::void_cast;
@@ -413,7 +413,7 @@ END_TEST
 
 START_TEST(test_certification_commit_fragment)
 {
-    const int version(3);
+    const int version(galera::WriteSetNG::VER5);
     using galera::Certification;
     using galera::TrxHandle;
     using galera::void_cast;
