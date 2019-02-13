@@ -209,9 +209,8 @@ namespace gcache
             {
                 log_fatal << "OOO release: seqno_released " << seqno_released
                           << ", releasing " << bh->seqno_g;
+                assert(0);
             }
-            assert(seqno_released + 1 == bh->seqno_g ||
-                   SEQNO_NONE == seqno_released);
 #endif
             seqno_released = bh->seqno_g;
         }
