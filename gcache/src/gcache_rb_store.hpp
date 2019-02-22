@@ -45,15 +45,19 @@ namespace gcache
             assert(bh->store == BUFFER_IN_RB);
             assert(bh->ctx == reinterpret_cast<BH_ctx_t>(this));
             assert(BH_is_released(bh)); // will be marked unreleased by caller
-            assert(size_used_ + aligned_size(bh->size) <= size_cache_);
+
             size_used_ += aligned_size(bh->size);
+            assert(size_used_ <= size_cache_);
         }
 
         void  discard (BufferHeader* const bh)
         {
             assert (BH_is_released(bh));
+            assert (BUFFER_IN_RB == bh->store);
+
             size_free_ += aligned_size(bh->size);
             assert (size_free_ <= size_cache_);
+
             /* so we know that the buffer is no longer in the map and can be
              * overwritten */
             bh->seqno_g = SEQNO_ILL;
