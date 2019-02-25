@@ -62,7 +62,7 @@ static const char* Defaults[] =
     "gcache.keep_pages_size",      "0",
     "gcache.keep_plaintext_size",  "128M", /* defaults to gcache.page_size */
     "gcache.mem_size",             "0",
-    "gcache.name",                 "./galera.cache",
+    "gcache.name",                 "galera.cache",
     "gcache.page_size",            "128M",
     "gcache.recover",              "yes",
     "gcache.size",                 "128M",
