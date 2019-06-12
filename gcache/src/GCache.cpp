@@ -47,7 +47,7 @@ namespace gcache
         gid       (),
         mem       (params.mem_size(), seqno2ptr, params.debug()),
         rb        (params.rb_name(), params.rb_size(), seqno2ptr, gid,
-                   params.debug(), params.recover()),
+                   params.debug(), encrypt_cb ? false : params.recover()),
         ps        (params.dir_name(),
                    encrypt_cb,
                    app_ctx,
