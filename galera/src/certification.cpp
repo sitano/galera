@@ -946,6 +946,7 @@ galera::Certification::Certification(gu::Config&     conf,
     nbo_index_             (),
     nbo_pool_              (sizeof(TrxHandleSlave)),
     deps_set_              (),
+    current_view_          (),
     service_thd_           (thd),
     mutex_                 (),
     trx_size_warn_count_   (0),
@@ -967,8 +968,8 @@ galera::Certification::Certification(gu::Config&     conf,
 
     max_length_            (max_length(conf)),
     max_length_check_      (length_check(conf)),
+    inconsistent_          (false),
     log_conflicts_         (conf.get<bool>(CERT_PARAM_LOG_CONFLICTS)),
-    current_view_          (),
     optimistic_pa_         (conf.get<bool>(CERT_PARAM_OPTIMISTIC_PA))
 {}
 
@@ -1339,4 +1340,12 @@ galera::Certification::param_set(const std::string& key,
     }
 
     conf_.set(key, value);
+}
+
+void
+galera::Certification::mark_inconsistent()
+{
+    gu::Lock lock(mutex_);
+    assert(!inconsistent_);
+    inconsistent_ = true;
 }

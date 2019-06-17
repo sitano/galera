@@ -761,12 +761,12 @@ wsrep_status_t galera_commit_order_leave(
     }
     catch (std::exception& e)
     {
-        log_error << e.what();
+        log_error << "commit_order_leave(): " << e.what();
         retval = WSREP_NODE_FAIL;
     }
     catch (...)
     {
-        log_fatal << "non-standard exception";
+        log_fatal << "commit_order_leave(): non-standard exception";
         retval = WSREP_FATAL;
     }
 
@@ -1262,12 +1262,12 @@ wsrep_status_t galera_to_execute_end(wsrep_t*           const gh,
     }
     catch (std::exception& e)
     {
-        log_warn << e.what();
-        ret = WSREP_CONN_FAIL;
+        log_error << "to_execute_end(): " << e.what();
+        ret = WSREP_NODE_FAIL;
     }
     catch (...)
     {
-        log_fatal << "non-standard exception";
+        log_fatal << "to_execute_end(): non-standard exception";
         ret = WSREP_FATAL;
     }
     gu_trace(repl->discard_local_conn_trx(conn_id));

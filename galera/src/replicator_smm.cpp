@@ -494,7 +494,13 @@ void galera::ReplicatorSMM::apply_trx(void* recv_ctx, TrxHandleSlave& ts)
         assert(NULL != e.data() || 0 == e.data_len());
         assert(0 != e.data_len() || NULL == e.data());
 
-        if (!st_.corrupt()) mark_corrupt_and_close();
+        if (!st_.corrupt())
+        {
+            assert(0 == e.data_len());
+            /* non-empty error must be handled in handle_apply_error(), while
+             * still in commit monitor. */
+            on_inconsistency();
+        }
     }
     /* at this point any other exception is fatal, not catching anything else.*/
 
@@ -1161,7 +1167,7 @@ wsrep_status_t galera::ReplicatorSMM::replay_trx(TrxHandleMaster& trx,
         }
         catch (gu::Exception& e)
         {
-            mark_corrupt_and_close();
+            on_inconsistency();
             return WSREP_NODE_FAIL;
         }
 
@@ -1395,7 +1401,7 @@ void galera::ReplicatorSMM::process_apply_error(TrxHandleSlave& trx,
     }
 }
 
-void
+wsrep_status_t
 galera::ReplicatorSMM::handle_apply_error(TrxHandleSlave&    ts,
                                           const wsrep_buf_t& error,
                                           const std::string& custom_msg)
@@ -1405,19 +1411,19 @@ galera::ReplicatorSMM::handle_apply_error(TrxHandleSlave&    ts,
     std::ostringstream os;
 
     os << custom_msg << ts.global_seqno() << ", error: ";
-
     dump_buf(os, error.ptr, error.len);
+    log_debug << "handle_apply_error(): " << os.str();
 
     try
     {
         if (!st_.corrupt())
             gu_trace(process_apply_error(ts, error));
+        return WSREP_OK;
     }
     catch (ApplyException& e)
     {
-        log_error << "Inconsistency detected: "
-                  << e.what();
-        mark_corrupt_and_close();
+        log_error << "Inconsistency detected: " << e.what();
+        on_inconsistency();
     }
     catch (gu::Exception& e)
     {
@@ -1431,6 +1437,8 @@ galera::ReplicatorSMM::handle_apply_error(TrxHandleSlave&    ts,
         assert(0);
         abort();
     }
+
+    return WSREP_NODE_FAIL;
 }
 
 wsrep_status_t
@@ -1471,7 +1479,7 @@ galera::ReplicatorSMM::commit_order_leave(TrxHandleSlave&          trx,
     if (gu_unlikely(error != NULL && error->ptr != NULL))
     {
         end_state = TrxHandle::S_ROLLED_BACK;
-        handle_apply_error(trx, *error, "Failed to apply writeset ");
+        retval = handle_apply_error(trx, *error, "Failed to apply writeset ");
     }
 
     if (gu_likely(co_mode_ != CommitOrder::BYPASS))
@@ -1884,10 +1892,10 @@ galera::ReplicatorSMM::to_isolation_end(TrxHandleMaster&         trx,
     assert(ts.state() == TrxHandle::S_COMMITTING ||
            ts.state() == TrxHandle::S_ABORTING);
 
+    wsrep_status_t ret(WSREP_OK);
     if (NULL != err && NULL != err->ptr)
     {
-        log_debug << "TO error message: " << gu::Hexdump(err->ptr, err->len, true);
-        handle_apply_error(ts, *err, "Failed to execute TOI action ");
+        ret = handle_apply_error(ts, *err, "Failed to execute TOI action ");
     }
 
     CommitOrder co(ts, co_mode_);
@@ -1917,7 +1925,7 @@ galera::ReplicatorSMM::to_isolation_end(TrxHandleMaster&         trx,
 
     report_last_committed(safe_to_discard);
 
-    return WSREP_OK;
+    return ret;
 }
 
 
@@ -2248,7 +2256,7 @@ void galera::ReplicatorSMM::process_vote(wsrep_seqno_t const seqno_g,
         msg << "Got negative vote on successfully applied " << gtid;
     fail:
         log_error << msg.str();
-        mark_corrupt_and_close();
+        on_inconsistency();
     }
     else
     {
@@ -2779,10 +2787,14 @@ galera::ReplicatorSMM::process_conf_change(void*                    recv_ctx,
     }
 
     free(app_req);
+    assert(!from_IST || conf.seqno > 0);
+    assert(!st_required || conf.seqno > 0);
 
     if (!from_IST /* A separate view from IST will be passed to ISTEventQueue */
         &&
-        !st_required /* in-order processing  */)
+        (!st_required /* in-order processing */
+         ||
+         conf.seqno < 0 /* non-primary configuration */))
     {
         try
         {
@@ -3076,7 +3088,7 @@ wsrep_status_t galera::ReplicatorSMM::cert(TrxHandleMaster* trx,
                 TX_SET_STATE(*trx, TrxHandle::S_MUST_REPLAY);
                 return retval;
             }
-            // if not - we need to rollback, so pretend that ceritficaiton
+            // if not - we need to rollback, so pretend that certification
             // failed, but still update cert index to match slaves
             else
             {
