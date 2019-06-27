@@ -101,7 +101,7 @@ gcache::Page::Page (void*              ps,
                     size_t size,
                     int dbg)
     :
-    fd_   (name, aligned_size(size), false, false),
+    fd_   (name, aligned_size(size), true, false),
     mmap_ (fd_),
     key_  (key),
     nonce_(nonce),
