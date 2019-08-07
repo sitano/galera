@@ -535,7 +535,9 @@ void galera::ist::Receiver::run()
             }
             case GCS_ACT_CCHANGE:
             {
-                //log_info << "####### Passing CC " << act.seqno_g;
+                //log_info << "####### Passing IST CC " << act.seqno_g
+                //         << ", must_apply: " << must_apply
+                //         << ", preload: " << preload;
                 gcs_act_cchange const cc
                     (gcache_.get_ro_plaintext(act.buf), act.size);
                 gcache_.drop_plaintext(act.buf); // see Proto::recv_ordered()
