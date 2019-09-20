@@ -34,6 +34,23 @@ namespace gcache
 #endif
     }
 
+    static bool recover_rb(bool const encrypt, bool const recover)
+    {
+        if (encrypt)
+        {
+            if (recover)
+            {
+                log_warn << "GCache recovery is not supported when encryption "
+                    "is enabled. Recovery will be skipped.";
+            }
+            return false;
+        }
+        else
+        {
+            return recover;
+        }
+    }
+
     GCache::GCache (gu::Config&              cfg,
                     const std::string&       data_dir,
                     wsrep_encrypt_cb_t const encrypt_cb,
@@ -47,7 +64,7 @@ namespace gcache
         gid       (),
         mem       (params.mem_size(), seqno2ptr, params.debug()),
         rb        (params.rb_name(), params.rb_size(), seqno2ptr, gid,
-                   params.debug(), encrypt_cb ? false : params.recover()),
+                   params.debug(), recover_rb(encrypt_cb, params.recover())),
         ps        (params.dir_name(),
                    encrypt_cb,
                    app_ctx,
