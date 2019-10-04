@@ -43,7 +43,7 @@ start_threads(void* arg)
     for (int ret = 0; ret < max_threads; ++ret)
     {
         gu_thread_t t;
-        int err = gu_thread_create (&t, NULL, thread_routine, arg);
+        int err = gu_thread_create (NULL, &t, thread_routine, arg);
         fail_if (err, "Failed to start thread %d: %d (%s)",
                  ret, err, strerror(err));
         threads[ret] = t;

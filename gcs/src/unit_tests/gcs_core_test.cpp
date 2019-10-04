@@ -168,7 +168,7 @@ core_recv_thread (void* arg)
 // args: action_t object
 static inline bool CORE_RECV_START(action_t* act)
 {
-    return (0 != gu_thread_create (&act->thread, NULL,
+    return (0 != gu_thread_create (NULL, &act->thread,
                                    core_recv_thread, act));
 }
 
@@ -260,7 +260,7 @@ static bool CORE_RECV_END(action_t*      act,
 {
     {
         int ret = gu_thread_join (act->thread, NULL);
-        act->thread = (gu_thread_t)-1;
+        act->thread = GU_THREAD_INITIALIZER;
         FAIL_IF(0 != ret, "Failed to join recv thread: %ld (%s)",
                 ret, strerror (ret));
     }
@@ -302,7 +302,7 @@ core_send_thread (void* arg)
 // args: action_t object
 static bool CORE_SEND_START(action_t* act)
 {
-    return (0 != gu_thread_create (&act->thread, NULL,
+    return (0 != gu_thread_create (NULL, &act->thread,
                                    core_send_thread, act));
 }
 
@@ -312,7 +312,7 @@ static bool CORE_SEND_END(action_t* act, long ret)
 {
     {
         long _ret = gu_thread_join (act->thread, NULL);
-        act->thread = (gu_thread_t)-1;
+        act->thread = GU_THREAD_INITIALIZER;
         FAIL_IF (0 != _ret, "Failed to join recv thread: %ld (%s)",
                  _ret, strerror (_ret));
     }
@@ -530,8 +530,8 @@ test_api(bool const enc)
     size_t      act_size = sizeof(act3_str);
 
     action_t act_s(act, NULL, NULL, act_size, GCS_ACT_WRITESET, -1,
-                   (gu_thread_t)-1);
-    action_t act_r(act, NULL, NULL, -1, (gcs_act_type_t)-1, -1, (gu_thread_t)-1);
+                   GU_THREAD_INITIALIZER);
+    action_t act_r(act, NULL, NULL, -1, (gcs_act_type_t)-1, -1, GU_THREAD_INITIALIZER);
     long i = 5;
 
     // test basic fragmentaiton
@@ -638,8 +638,8 @@ CORE_TEST_OWN(bool const enc, int gcs_proto_ver)
     size_t               act_size = sizeof(act2_str);
 
     action_t act_s(act, NULL, NULL, act_size, GCS_ACT_WRITESET, -1,
-                   (gu_thread_t)-1);
-    action_t act_r(act, NULL, NULL, -1, (gcs_act_type_t)-1, -1, (gu_thread_t)-1);
+                   GU_THREAD_INITIALIZER);
+    action_t act_r(act, NULL, NULL, -1, (gcs_act_type_t)-1, -1, GU_THREAD_INITIALIZER);
 
     // Create primary and non-primary component messages
     gcs_comp_msg_t* prim     = gcs_comp_msg_new (true, false,  0, 1, 0);
@@ -897,7 +897,8 @@ START_TEST (gcs_core_test_gh74)
     gcs_state_msg_write (state_buf2, state_msg);
     gcs_state_msg_destroy (state_msg);
 
-    action_t act_r(NULL,  NULL, NULL, -1, (gcs_act_type_t)-1, -1, (gu_thread_t)-1);
+    action_t act_r(NULL,  NULL, NULL, -1, (gcs_act_type_t)-1, -1,
+                   GU_THREAD_INITIALIZER);
 
     // ========== from node1's view ==========
     fail_if (gcs_dummy_set_component(Backend, prim));
@@ -1004,7 +1005,8 @@ START_TEST (gcs_core_test_gh74)
     // otherwise we will get following log
     // "FIFO violation: queue empty when local action received"
     const struct gu_buf act = {act_ptr, (ssize_t)act_size};
-    action_t act_s(&act, NULL, NULL, act_size, GCS_ACT_STATE_REQ, -1, (gu_thread_t)-1);
+    action_t act_s(&act, NULL, NULL, act_size, GCS_ACT_STATE_REQ, -1,
+                   GU_THREAD_INITIALIZER);
     CORE_SEND_START(&act_s);
     for(;;) {
         usleep(10000);

@@ -6,6 +6,7 @@
 #include "gcache_bh.hpp"
 
 #include <gu_logger.hpp>
+#include "gu_thread_keys.hpp"
 
 #include <cerrno>
 #include <unistd.h>
@@ -58,8 +59,8 @@ namespace gcache
         :
         config    (cfg),
         params    (config, data_dir),
-        mtx       (),
-        cond      (),
+        mtx       (gu::get_mutex_key(gu::GU_MUTEX_KEY_GCACHE)),
+        cond      (gu::get_cond_key(gu::GU_COND_KEY_GCACHE)),
         seqno2ptr (),
         gid       (),
         mem       (params.mem_size(), seqno2ptr, params.debug()),

@@ -170,7 +170,8 @@ struct app_ctx
     wsrep_t   provider_;
     bool      connected_;
 
-    app_ctx() : mtx_(), cond_(), provider_(), connected_(false) {}
+    app_ctx() : mtx_(0), cond_(0),
+                provider_(), connected_(false) {}
 };
 
 static enum wsrep_cb_status
@@ -289,7 +290,7 @@ defaults(bool const enc)
     {
         /* some configuration change events need to be received */
         gu_thread_t recv_thd;
-        gu_thread_create(&recv_thd, NULL, recv_func, &ctx);
+        gu_thread_create(NULL, &recv_thd,  recv_func, &ctx);
 
         mark_point();
 

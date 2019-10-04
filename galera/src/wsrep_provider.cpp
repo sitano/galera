@@ -1,9 +1,10 @@
 //
-// Copyright (C) 2010-2017 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 #include "key_data.hpp"
 #include "gu_serialize.hpp"
+#include "gu_thread_keys.hpp"
 
 #if defined(GALERA_MULTIMASTER)
 #include "replicator_smm.hpp"
@@ -1657,4 +1658,11 @@ int wsrep_loader(wsrep_t *hptr)
     }
 
     return WSREP_OK;
+}
+
+extern "C"
+int wsrep_init_thread_service_v1(wsrep_thread_service_v1_t* ts)
+
+{
+    return gu::init_thread_service_v1(ts);
 }

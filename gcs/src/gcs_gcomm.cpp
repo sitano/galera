@@ -91,7 +91,9 @@ private:
 
 public:
 
-    RecvBuf() : mutex_(), cond_(), queue_(), waiting_(false) { }
+    RecvBuf() : mutex_(gu::get_mutex_key(gu::GU_MUTEX_KEY_GCS_GCOMM_RECV_BUF)),
+                cond_(gu::get_cond_key(gu::GU_COND_KEY_GCS_GCOMM_RECV_BUF)),
+                queue_(), waiting_(false) { }
 
     void push_back(const RecvBufData& p)
     {
@@ -152,7 +154,7 @@ public:
         uri_(u),
         net_(Protonet::create(conf_)),
         tp_(0),
-        mutex_(),
+        mutex_(gu::get_mutex_key(gu::GU_MUTEX_KEY_GCS_GCOMM_CONN)),
         refcnt_(0),
         terminated_(false),
         error_(0),
@@ -188,7 +190,9 @@ public:
 
         error_ = ENOTCONN;
         int err;
-        if ((err = gu_thread_create(&thd_, 0, &run_fn, this)) != 0)
+        if ((err = gu_thread_create(
+                 gu::get_thread_key(gu::GU_THREAD_KEY_GCS_GCOMM),
+                 &thd_, &run_fn, this)) != 0)
         {
             gu_throw_error(err) << "Failed to create thread";
         }

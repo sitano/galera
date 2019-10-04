@@ -32,8 +32,8 @@ namespace galera
     public:
         NBOCtx()
             :
-            mutex_(),
-            cond_ (),
+            mutex_(gu::get_mutex_key(gu::GU_MUTEX_KEY_NBO)),
+            cond_ (gu::get_cond_key(gu::GU_COND_KEY_NBO)),
             ts_   (),
             aborted_(false)
         { }

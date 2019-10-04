@@ -21,6 +21,7 @@
 #include <gu_logger.hpp>
 #include <gu_serialize.hpp>
 #include <gu_digest.hpp>
+#include <gu_thread_keys.hpp>
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -352,9 +353,10 @@ gcs_create (gu_config_t* const conf, gcache_t* const gcache,
     conn->max_fc_state = conn->params.sync_donor ?
         GCS_CONN_DONOR : GCS_CONN_JOINED;
 
-    gu_mutex_init (&conn->fc_lock, NULL);
-    gu_mutex_init (&conn->vote_lock_, NULL);
-    gu_cond_init  (&conn->vote_cond_, NULL);
+    gu_mutex_init(gu::get_mutex_key(gu::GU_MUTEX_KEY_GCS_FC), &conn->fc_lock);
+    gu_mutex_init(gu::get_mutex_key(gu::GU_MUTEX_KEY_GCS_VOTE),
+                  &conn->vote_lock_);
+    gu_cond_init(gu::get_cond_key(gu::GU_COND_KEY_GCS_VOTE), &conn->vote_cond_);
 
     return conn; // success
 
@@ -1386,7 +1388,7 @@ static void *gcs_recv_thread (void *arg)
 
     // To avoid race between gcs_open() and the following state check in while()
     gu_cond_t tmp_cond; /* TODO: rework when concurrency in SM is allowed */
-    gu_cond_init (&tmp_cond, NULL);
+    gu_cond_init (gu::get_cond_key(gu::GU_COND_KEY_GCS_RECV_THREAD), &tmp_cond);
     gcs_sm_enter(conn->sm, &tmp_cond, false, true);
     gcs_sm_leave(conn->sm);
     gu_cond_destroy (&tmp_cond);
@@ -1575,7 +1577,7 @@ long gcs_open (gcs_conn_t* conn, const char* channel, const char* url,
     if ((ret = gcs_sm_open(conn->sm))) return ret; // open in case it is closed
 
     gu_cond_t tmp_cond; /* TODO: rework when concurrency in SM is allowed */
-    gu_cond_init (&tmp_cond, NULL);
+    gu_cond_init (gu::get_cond_key(gu::GU_COND_KEY_GCS_OPEN), &tmp_cond);
 
     if ((ret = gcs_sm_enter (conn->sm, &tmp_cond, false, true)))
     {
@@ -1589,8 +1591,10 @@ long gcs_open (gcs_conn_t* conn, const char* channel, const char* url,
 
             _reset_pkt_size(conn);
 
-            if (!(ret = gu_thread_create (&conn->recv_thread, NULL,
-                                          gcs_recv_thread, conn))) {
+            if (!(ret = gu_thread_create (
+                      gu::get_thread_key(gu::GU_THREAD_KEY_GCS_RECV),
+                      &conn->recv_thread,
+                      gcs_recv_thread, conn))) {
                 gcs_fifo_lite_open(conn->repl_q);
                 gu_fifo_open(conn->recv_q);
                 gcs_shift_state (conn, GCS_CONN_OPEN);
@@ -1658,7 +1662,7 @@ long gcs_destroy (gcs_conn_t *conn)
     long err;
 
     gu_cond_t tmp_cond;
-    gu_cond_init (&tmp_cond, NULL);
+    gu_cond_init (gu::get_cond_key(gu::GU_COND_KEY_GCS_DESTROY), &tmp_cond);
 
     if ((err = gcs_sm_enter (conn->sm, &tmp_cond, false, true))) // need an error here
     {
@@ -1700,6 +1704,8 @@ long gcs_destroy (gcs_conn_t *conn)
         return err;
     }
 
+    gu_cond_destroy(&conn->vote_cond_);
+    gu_mutex_destroy(&conn->vote_lock_);
     /* This must not last for long */
     while (gu_mutex_destroy (&conn->fc_lock));
 
@@ -1737,7 +1743,7 @@ long gcs_sendv (gcs_conn_t*          const conn,
          *  @note: gcs_repl() and gcs_recv() cannot lock connection
          *         because they block indefinitely waiting for actions */
         gu_cond_t tmp_cond;
-        gu_cond_init (&tmp_cond, NULL);
+        gu_cond_init (gu::get_cond_key(gu::GU_COND_KEY_GCS_SENDV), &tmp_cond);
 
         if (!(ret = gcs_sm_enter (conn->sm, &tmp_cond, scheduled, true))) {
             while ((GCS_CONN_OPEN >= conn->state) &&
@@ -1785,8 +1791,10 @@ long gcs_replv (gcs_conn_t*          const conn,      //!<in
     /* This is good - we don't have to do a copy because we wait */
     struct gcs_repl_act repl_act(act_in, act);
 
-    gu_mutex_init (&repl_act.wait_mutex, NULL);
-    gu_cond_init  (&repl_act.wait_cond,  NULL);
+    gu_mutex_init (gu::get_mutex_key(gu::GU_MUTEX_KEY_GCS_REPL_ACT_WAIT),
+                   &repl_act.wait_mutex);
+    gu_cond_init  (gu::get_cond_key(gu::GU_COND_KEY_GCS_REPL_ACT_WAIT),
+                   &repl_act.wait_cond);
 
     /* Send action and wait for signal from recv_thread
      * we need to lock a mutex before we can go wait for signal */
@@ -2148,7 +2156,7 @@ gcs_set_last_applied (gcs_conn_t* conn, const gu::GTID& gtid)
     assert(gtid.seqno() >= 0);
 
     gu_cond_t cond;
-    gu_cond_init (&cond, NULL);
+    gu_cond_init (gu::get_cond_key(gu::GU_COND_KEY_GCS_SET_LAST_APPLIED), &cond);
 
     long ret = gcs_sm_enter (conn->sm, &cond, false, false);
 

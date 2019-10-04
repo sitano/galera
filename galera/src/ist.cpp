@@ -99,8 +99,8 @@ galera::ist::Receiver::Receiver(gu::Config&           conf,
     io_service_   (),
     acceptor_     (io_service_),
     ssl_ctx_      (io_service_, asio::ssl::context::sslv23),
-    mutex_        (),
-    cond_         (),
+    mutex_        (gu::get_mutex_key(gu::GU_MUTEX_KEY_IST_RECEIVER)),
+    cond_         (gu::get_cond_key(gu::GU_COND_KEY_IST_RECEIVER)),
     first_seqno_  (WSREP_SEQNO_UNDEFINED),
     last_seqno_   (WSREP_SEQNO_UNDEFINED),
     current_seqno_(WSREP_SEQNO_UNDEFINED),
@@ -344,7 +344,9 @@ galera::ist::Receiver::prepare(wsrep_seqno_t const first_seqno,
     last_seqno_    = last_seqno;
 
     int err;
-    if ((err = gu_thread_create(&thread_, 0, &run_receiver_thread, this)) != 0)
+    if ((err = gu_thread_create(
+             gu::get_thread_key(gu::GU_THREAD_KEY_IST),
+             &thread_, &run_receiver_thread, this)) != 0)
     {
         recv_addr_ = "";
         gu_throw_error(err) << "Unable to create receiver thread";
@@ -953,7 +955,8 @@ void galera::ist::AsyncSenderMap::run(const gu::Config&   conf,
     gu::Critical crit(monitor_);
     AsyncSender* as(new AsyncSender(conf, peer, first, last, preload_start,
                                     *this, version));
-    int err(gu_thread_create(&as->thread_, 0, &run_async_sender, as));
+    int err(gu_thread_create(gu::get_thread_key(gu::GU_THREAD_KEY_ASYNC_SENDER),
+                             &as->thread_, &run_async_sender, as));
     if (err != 0)
     {
         delete as;

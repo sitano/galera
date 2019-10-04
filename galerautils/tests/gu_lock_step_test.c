@@ -37,7 +37,7 @@ START_TEST (gu_lock_step_test)
     fail_if (LS.enabled != false);
 
     // first try with lock-stepping disabled
-    ret = gu_thread_create (&thr1, NULL, lock_step_thread, NULL);
+    ret = gu_thread_create (NULL, &thr1, lock_step_thread, NULL);
     fail_if (ret != 0);
     WAIT_FOR(0 == LS.wait); // 10ms
     fail_if (LS.wait != 0); // by default lock-step is disabled
@@ -55,12 +55,12 @@ START_TEST (gu_lock_step_test)
     ret = gu_lock_step_cont (&LS, timeout);
     fail_if (0 != ret); // nobody's waiting
 
-    ret = gu_thread_create (&thr1, NULL, lock_step_thread, NULL);
+    ret = gu_thread_create (NULL, &thr1, lock_step_thread, NULL);
     fail_if (ret != 0);
     WAIT_FOR(1 == LS.wait); // 10ms
     fail_if (LS.wait != 1);
 
-    ret = gu_thread_create (&thr2, NULL, lock_step_thread, NULL);
+    ret = gu_thread_create (NULL, &thr2, lock_step_thread, NULL);
     fail_if (ret != 0);
     WAIT_FOR(2 == LS.wait); // 10ms
     fail_if (LS.wait != 2);
@@ -109,7 +109,7 @@ START_TEST (gu_lock_step_race)
     gu_lock_step_enable (&LS, true);
     fail_if (LS.enabled != true);
 
-    ret = gu_thread_create (&thr1, NULL, lock_step_race, NULL);
+    ret = gu_thread_create (NULL, &thr1, lock_step_race, NULL);
     fail_if (ret != 0);
 
     for (i = 0; i < RACE_ITERATIONS; i++) {

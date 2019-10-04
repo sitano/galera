@@ -5,6 +5,7 @@
 #include "saved_state.hpp"
 #include <gu_dbug.h>
 #include <gu_uuid.hpp>
+#include "gu_thread_keys.hpp"
 
 #include <fstream>
 
@@ -27,7 +28,7 @@ SavedState::SavedState  (const std::string& file) :
     safe_to_bootstrap_(true),
     unsafe_       (0),
     corrupt_      (false),
-    mtx_          (),
+    mtx_          (gu::get_mutex_key(gu::GU_MUTEX_KEY_SAVED_STATE)),
     written_uuid_ (uuid_),
     current_len_  (0),
     total_marks_  (0),

@@ -91,8 +91,8 @@ public:
                                                  Defaults::PcWeight),
                                       0, 0xff)),
         rst_view_         (),
-        sync_param_mutex_ (),
-        sync_param_cond_  (),
+        sync_param_mutex_ (0),
+        sync_param_cond_  (0),
         param_sync_set_   (0)
 
     {

@@ -100,6 +100,7 @@ with open(galera_script, 'w') as f:
     f.write('''{
     global: wsrep_loader;
             wsrep_interface_version;
+            wsrep_init_thread_service_v1;
     local:  *;
 };
 ''')

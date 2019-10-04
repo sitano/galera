@@ -32,6 +32,7 @@ namespace galera
 {
 
     class NBOCtx; // forward decl
+    class ReplicatorSMM;
 
     static std::string const working_dir = "/tmp";
 
@@ -713,6 +714,9 @@ namespace galera
 #ifndef NDEBUG
             ,explicit_rollback_(false)
 #endif /* NDEBUG */
+            , local_order_cond_(gu::get_cond_key(gu::GU_COND_KEY_LOCAL_MONITOR))
+            , apply_order_cond_(gu::get_cond_key(gu::GU_COND_KEY_APPLY_MONITOR))
+            , commit_order_cond_(gu::get_cond_key(gu::GU_COND_KEY_COMMIT_MONITOR))
         {}
 
         friend class TrxHandleMaster;
@@ -740,6 +744,15 @@ namespace galera
         bool                   explicit_rollback_;
 #endif /* NDEBUG */
 
+        // Condition variable for each monitor. Ideally this should be
+        // only one, but we may want to get more specific statistics about
+        // waits per each monitor.
+        friend class ReplicatorSMM;
+        mutable gu::Cond               local_order_cond_;
+        mutable gu::Cond               apply_order_cond_;
+        mutable gu::Cond               commit_order_cond_;
+
+    private:
         TrxHandleSlave(const TrxHandleSlave&);
         void operator=(const TrxHandleSlave& other);
 
@@ -1060,7 +1073,7 @@ namespace galera
                         size_t              reserved_size)
             :
             TrxHandle(&trans_map_, source_id, conn_id, trx_id, params.version_),
-            mutex_             (),
+            mutex_             (gu::get_mutex_key(gu::GU_MUTEX_KEY_TRX_HANDLE)),
             mem_pool_          (mp),
             params_            (params),
             ts_                (),

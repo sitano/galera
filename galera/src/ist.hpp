@@ -154,7 +154,8 @@ namespace galera
             AsyncSenderMap(gcache::GCache& gcache)
                 :
                 senders_(),
-                monitor_(),
+                monitor_(gu::get_mutex_key(gu::GU_MUTEX_KEY_IST_ASYNC_SENDER),
+                         gu::get_cond_key(gu::GU_COND_KEY_IST_ASYNC_SENDER)),
                 gcache_(gcache)
             { }
 

@@ -263,8 +263,8 @@ namespace galera
         public:
             ISTEventQueue()
                 :
-                mutex_(),
-                cond_(),
+                mutex_(gu::get_mutex_key(gu::GU_MUTEX_KEY_IST_EVENT_QUEUE)),
+                cond_(gu::get_cond_key(gu::GU_COND_KEY_IST_EVENT_QUEUE)),
                 eof_(false),
                 error_(0),
                 queue_()
@@ -498,26 +498,44 @@ namespace galera
 
             explicit
             LocalOrder(const TrxHandleSlave& ts)
-                :
-                seqno_(ts.local_seqno())
-#if defined(GU_DBUG_ON) || !defined(NDEBUG)
-                ,trx_(&ts)
-#endif //GU_DBUG_ON
+                : seqno_(ts.local_seqno())
+                , cond_(&ts.local_order_cond_)
+                , trx_(&ts)
             { }
 
             LocalOrder(wsrep_seqno_t seqno, const TrxHandleSlave* ts = NULL)
-                :
-                seqno_(seqno)
-#if defined(GU_DBUG_ON) || !defined(NDEBUG)
-                ,trx_(ts)
-#endif //GU_DBUG_ON
+                : seqno_(seqno)
+                , cond_(ts ? &ts->local_order_cond_ :
+                        new gu::Cond(
+                            gu::get_cond_key(gu::GU_COND_KEY_LOCAL_MONITOR)))
+                , trx_(ts)
             {
-#if defined(GU_DBUG_ON) || !defined(NDEBUG)
+                assert(ts || cond_);
                 assert((trx_ && seqno_ == trx_->local_seqno()) || !trx_);
-#endif //GU_DBUG_ON
             }
 
+            ~LocalOrder()
+            {
+                if (not trx_) delete cond_;
+            }
+
+#if defined(GU_DBUG_ON) || !defined(NDEBUG)
+            LocalOrder(const LocalOrder& other)
+                : seqno_(other.seqno_)
+                  // Do not copy cond for debug diagnostics as it may be
+                  // deleted in destructor, which would cause double free.
+                , cond_()
+                , trx_(other.trx_)
+            { }
+
+#else
+            LocalOrder(const LocalOrder&) = delete;
+#endif
+            LocalOrder& operator=(const LocalOrder&) = delete;
+
             wsrep_seqno_t seqno() const { return seqno_; }
+
+            gu::Cond* cond() { return cond_; }
 
             bool condition(wsrep_seqno_t last_entered,
                            wsrep_seqno_t last_left) const
@@ -548,12 +566,10 @@ namespace galera
 
 #ifndef NDEBUG
             LocalOrder()
-                :
-                seqno_(WSREP_SEQNO_UNDEFINED)
-#if defined(GU_DBUG_ON) || !defined(NDEBUG)
-                ,trx_(NULL)
-#endif /* GU_DBUG_ON || !NDEBUG */
-            {}
+                : seqno_(WSREP_SEQNO_UNDEFINED)
+                , cond_()
+                , trx_()
+            { }
 #endif /* NDEBUG */
 
             void print(std::ostream& os) const
@@ -562,15 +578,11 @@ namespace galera
             }
 
         private:
-#ifdef NDEBUG
-            LocalOrder(const LocalOrder& o);
-#endif /* NDEBUG */
             wsrep_seqno_t const seqno_;
-#if defined(GU_DBUG_ON) || !defined(NDEBUG)
-            // this pointer is for debugging purposes only and
-            // is not guaranteed to point at a valid location
+            gu::Cond* cond_;
+            // This pointer is not guaranteed to point into valid location
+            // if the object was copy-constructed.
             const TrxHandleSlave* const trx_;
-#endif /* GU_DBUG_ON || !NDEBUG */
         };
 
         class ApplyOrder
@@ -581,6 +593,7 @@ namespace galera
                 :
                 global_seqno_ (ts.global_seqno()),
                 depends_seqno_(ts.depends_seqno()),
+                cond_(&ts.apply_order_cond_),
                 is_local_     (ts.local()),
                 is_toi_       (ts.is_toi())
 #ifndef NDEBUG
@@ -598,6 +611,7 @@ namespace galera
                 :
                 global_seqno_ (gs),
                 depends_seqno_(ds),
+                cond_(),
                 is_local_     (l),
                 is_toi_       (false)
 #ifndef NDEBUG
@@ -606,6 +620,8 @@ namespace galera
             { }
 
             wsrep_seqno_t seqno() const { return global_seqno_; }
+
+            gu::Cond* cond() { return cond_; }
 
             bool condition(wsrep_seqno_t last_entered,
                            wsrep_seqno_t last_left) const
@@ -637,6 +653,7 @@ namespace galera
                 :
                 global_seqno_ (WSREP_SEQNO_UNDEFINED),
                 depends_seqno_(WSREP_SEQNO_UNDEFINED),
+                cond_(),
                 is_local_     (false),
                 is_toi_       (false),
                 trx_          (NULL)
@@ -656,6 +673,7 @@ namespace galera
 #endif /* NDEBUG */
             const wsrep_seqno_t global_seqno_;
             const wsrep_seqno_t depends_seqno_;
+            gu::Cond* cond_;
             const bool is_local_;
             const bool is_toi_;
 #ifndef NDEBUG
@@ -696,6 +714,7 @@ namespace galera
             CommitOrder(const TrxHandleSlave& ts, Mode mode)
                 :
                 global_seqno_(ts.global_seqno()),
+                cond_(&ts.commit_order_cond_),
                 mode_(mode),
                 is_local_(ts.local())
 #ifndef NDEBUG
@@ -706,6 +725,7 @@ namespace galera
             CommitOrder(wsrep_seqno_t gs, Mode mode, bool local = false)
                 :
                 global_seqno_(gs),
+                cond_(),
                 mode_(mode),
                 is_local_(local)
 #ifndef NDEBUG
@@ -714,6 +734,8 @@ namespace galera
             { }
 
             wsrep_seqno_t seqno() const { return global_seqno_; }
+
+            gu::Cond* cond() { return cond_; }
 
             bool condition(wsrep_seqno_t last_entered,
                            wsrep_seqno_t last_left) const
@@ -756,6 +778,7 @@ namespace galera
             CommitOrder()
                 :
                 global_seqno_ (WSREP_SEQNO_UNDEFINED),
+                cond_         (),
                 mode_         (OOOC),
                 is_local_     (false),
                 trx_          (NULL)
@@ -775,6 +798,7 @@ namespace galera
             CommitOrder(const CommitOrder&);
 #endif
             const wsrep_seqno_t global_seqno_;
+            gu::Cond* cond_;
             const Mode mode_;
             const bool is_local_;
 #ifndef NDEBUG
@@ -1003,7 +1027,8 @@ namespace galera
         {
         public:
             PendingCertQueue(gcache::GCache& gcache) :
-                mutex_(),
+                mutex_(gu::get_mutex_key(
+                           gu::GU_MUTEX_KEY_PENDING_CERTIFICATION)),
                 ts_queue_(),
                 gcache_(gcache)
             { }

@@ -172,8 +172,8 @@ namespace
     {
     public:
         ISTHandler() :
-            mutex_(),
-            cond_(),
+            mutex_(0),
+            cond_(0),
             seqno_(0),
             eof_(false),
             error_(0)
@@ -473,10 +473,10 @@ static void test_ist_common(int  const version,
 
     gu_thread_t sender_thread, receiver_thread;
 
-    gu_thread_create(&sender_thread, 0, &sender_thd, &sargs);
+    gu_thread_create(NULL, &sender_thread, &sender_thd, &sargs);
     mark_point();
     usleep(100000);
-    gu_thread_create(&receiver_thread, 0, &receiver_thd, &rargs);
+    gu_thread_create(NULL, &receiver_thread,  &receiver_thd, &rargs);
     mark_point();
 
     gu_thread_join(sender_thread, 0);
