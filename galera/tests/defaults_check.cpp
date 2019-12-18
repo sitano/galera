@@ -33,7 +33,7 @@ static const char* Defaults[] =
     "cert.log_conflicts",          "no",
     "cert.optimistic_pa",          "yes",
     "debug",                       "no",
-#ifndef NDEBUG
+#ifdef GU_DBUG_ON
     "dbug",                        "",
 #endif
     "evs.auto_evict",              "0",
@@ -106,7 +106,7 @@ static const char* Defaults[] =
     "repl.key_format",             "FLAT8",
     "repl.max_ws_size",            "2147483647",
     "repl.proto_max",              "10",
-#ifndef NDEBUG
+#ifdef GU_DBUG_ON
     "signal",                      "",
 #endif
     "socket.checksum",             "2",
