@@ -224,8 +224,8 @@ private:
         mtu_              (std::numeric_limits<int32_t>::max()),
         weight_           (),
         rst_view_         (),
-        sync_param_mutex_ (),
-        sync_param_cond_  (),
+        sync_param_mutex_ (0),
+        sync_param_cond_  (0),
         param_sync_set_   (0)
     { }
 
