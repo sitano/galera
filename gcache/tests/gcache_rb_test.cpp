@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2018 Codership Oy <info@codership.com>
+ * Copyright (C) 2011-2020 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -418,7 +418,7 @@ START_TEST(recovery)
     ::unlink(RB_NAME.c_str());
 
     /* test for singe segment in the middle */
-    void* third_buffer(NULL);
+    ptrdiff_t third_buffer_offset(0);
     {
         rb_ctx ctx(rb_3size, false);
 
@@ -445,7 +445,7 @@ START_TEST(recovery)
         m = ctx.add_msg(msgs[5]);
         fail_if (NULL == m);
         fail_if (ctx.s2p.find(msgs[5].g) != ctx.s2p.end());
-        third_buffer = m;
+        third_buffer_offset = ctx.rb.offset(m);
 
         fail_if(ctx.s2p.empty());
         fail_if(ctx.s2p.size() != 1);
@@ -500,7 +500,7 @@ START_TEST(recovery)
         // must be allocated right after the recovered buffer
         void* m(ctx.add_msg(msgs[3]));
         fail_if (NULL == m);
-        fail_if (third_buffer != m);
+        fail_if (third_buffer_offset != ctx.rb.offset(m));
     }
 
     ::unlink(RB_NAME.c_str());
