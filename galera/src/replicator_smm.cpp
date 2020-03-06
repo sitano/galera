@@ -387,9 +387,9 @@ wsrep_status_t galera::ReplicatorSMM::async_recv(void* recv_ctx)
 
     while (WSREP_OK == retval && state_() > S_CLOSED)
     {
-        ssize_t rc;
-
         GU_DBUG_SYNC_EXECUTE("before_async_recv_process_sync", sleep(5););
+
+        ssize_t rc;
 
         while (gu_unlikely((rc = as_->process(recv_ctx, exit_loop))
                            == -ECANCELED))
@@ -402,7 +402,15 @@ wsrep_status_t galera::ReplicatorSMM::async_recv(void* recv_ctx)
 
         if (gu_unlikely(rc <= 0))
         {
-            retval = WSREP_CONN_FAIL;
+            if (GcsActionSource::INCONSISTENCY_CODE == rc)
+            {
+                st_.mark_corrupt();
+                retval = WSREP_FATAL;
+            }
+            else
+            {
+                retval = WSREP_CONN_FAIL;
+            }
         }
         else if (gu_unlikely(exit_loop == true))
         {
@@ -2970,12 +2978,15 @@ void galera::ReplicatorSMM::process_prim_conf_change(void* recv_ctx,
 
     if (first_view)
     {
-        set_initial_position(group_uuid, group_seqno - 1);
+        /* if CC is ordered need to use preceding seqno */
+        set_initial_position(group_uuid, group_seqno - ordered);
+        gcache_.seqno_reset(gu::GTID(group_uuid, group_seqno - ordered));
     }
     else
     {
         // Note: Monitor initial position setting is not needed as this CC
-        // is processing in order.
+        // is processed in order.
+        assert(state_uuid_ == group_uuid);
         update_state_uuid(group_uuid);
     }
 

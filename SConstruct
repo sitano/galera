@@ -1,6 +1,6 @@
 ###################################################################
 #
-# Copyright (C) 2010-2019 Codership Oy <info@codership.com>
+# Copyright (C) 2010-2020 Codership Oy <info@codership.com>
 #
 # SCons build script to build galera libraries
 #
