@@ -955,6 +955,8 @@ namespace galera
          *       given protocol version.
          */
 
+        /* last protocol version of Galera 3 series */
+        static int const PROTO_VER_GALERA_3_MAX = 9;
         /* repl protocol version which orders CC */
         static int const PROTO_VER_ORDERED_CC = 10;
 
@@ -1133,6 +1135,15 @@ namespace galera
     { o.print(os); return os; }
 #endif /* GALERA_MONITOR_DEBUG_PRINT */
 
+    /**
+     * Get transaction protocol and record set versions based on group protocol
+     *
+     * @param proto_ver Group protocol version
+     *
+     * @return Tuple consisting of trx protocol and record set versions.
+     */
+    std::tuple<int, enum gu::RecordSet::Version>
+    get_trx_protocol_versions(int proto_ver);
 } /* namespace galera */
 
 #endif /* GALERA_REPLICATOR_SMM_HPP */
