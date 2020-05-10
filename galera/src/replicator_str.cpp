@@ -1022,7 +1022,7 @@ ReplicatorSMM::request_state_transfer (void* recv_ctx,
                 // Note: apply_monitor_ must be drained to avoid race between
                 // IST appliers and GCS appliers, GCS action source may
                 // provide actions that have already been applied via IST.
-                log_info << "Draining apply monitors after IST upto "
+                log_info << "Draining apply monitors after IST up to "
                          << sst_seqno_;
                 apply_monitor_.drain(sst_seqno_);
                 set_initial_position(group_uuid, sst_seqno_);
@@ -1424,7 +1424,7 @@ void ReplicatorSMM::ist_cc(const gcs_act_cchange& conf,
             establish_protocol_versions(conf.repl_proto_ver);
             cert_.adjust_position(*view_info, gu::GTID(conf.uuid, conf.seqno),
                                   trx_params_.version_);
-            // record CC releated state seqnos, needed for IST on DONOR
+            // record CC related state seqnos, needed for IST on DONOR
             record_cc_seqnos(conf.seqno, "preload");
             ::free(view_info);
         }
