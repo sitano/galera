@@ -26,7 +26,8 @@ static_assert(sizeof(source) == 83, "source length is not a prime number");
 
 /* tests empty message encryption */
 static void
-null_test(wsrep_encrypt_cb_t const cb, void* app_ctx, size_t const blocksize)
+do_null_test(wsrep_encrypt_cb_t const cb, void* app_ctx,
+	     size_t const blocksize)
 {
     wsrep_buf_t in = { NULL, 0 };
     char out(0);
@@ -38,13 +39,13 @@ null_test(wsrep_encrypt_cb_t const cb, void* app_ctx, size_t const blocksize)
 
 START_TEST(null_test)
 {
-    null_test(gcache_test_encrypt_cb, NULL, 16);
+    do_null_test(gcache_test_encrypt_cb, NULL, 16);
 }
 END_TEST
 
 /* tests atomic message encryption */
 static void
-fin_test(wsrep_encrypt_cb_t const cb, void* app_ctx, size_t const blocksize)
+do_fin_test(wsrep_encrypt_cb_t const cb, void* app_ctx, size_t const blocksize)
 {
     assert(sizeof(source) % blocksize);
     wsrep_buf_t orig = { source, sizeof(source) };
@@ -85,13 +86,14 @@ fin_test(wsrep_encrypt_cb_t const cb, void* app_ctx, size_t const blocksize)
 
 START_TEST(fin_test)
 {
-    fin_test(gcache_test_encrypt_cb, NULL, 16);
+    do_fin_test(gcache_test_encrypt_cb, NULL, 16);
 }
 END_TEST
 
 /* test stream encryption */
 static void
-stream_test(wsrep_encrypt_cb_t const cb, void* app_ctx, size_t const blocksize)
+do_stream_test(wsrep_encrypt_cb_t const cb, void* app_ctx,
+	       size_t const blocksize)
 {
     assert(sizeof(source) % blocksize);
     wsrep_enc_ctx_t const comp_ctx = ctx11;
@@ -151,7 +153,7 @@ stream_test(wsrep_encrypt_cb_t const cb, void* app_ctx, size_t const blocksize)
 
 START_TEST(stream_test)
 {
-    stream_test(gcache_test_encrypt_cb, NULL, 16);
+    do_stream_test(gcache_test_encrypt_cb, NULL, 16);
 }
 END_TEST
 
