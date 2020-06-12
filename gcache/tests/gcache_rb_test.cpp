@@ -31,7 +31,7 @@ START_TEST(test1)
 
     size_t const rb_size(ALLOC_SIZE(2) * 2);
 
-    std::map<int64_t, const void*> s2p;
+    seqno2ptr_t s2p(SEQNO_NONE);
     gu::UUID   gid(GID);
     RingBuffer rb(RB_NAME, rb_size, s2p, gid, 0, false);
 
@@ -155,20 +155,14 @@ START_TEST(recovery)
         RingBuffer   rb;
 
         rb_ctx(size_t s, bool recover = true) :
-            size(s), s2p(), gid(GID), rb(RB_NAME, size, s2p, gid, 0, recover) {}
+            size(s), s2p(SEQNO_NONE), gid(GID),
+            rb(RB_NAME, size, s2p, gid, 0, recover)
+        {}
 
         void seqno_assign (seqno2ptr_t& s2p, void* const ptr,
                            seqno_t const g, seqno_t const d)
         {
-            const std::pair<seqno2ptr_iter_t, bool>& res
-                (s2p.insert(seqno2ptr_pair_t(g, ptr)));
-
-            if (false == res.second)
-            {
-                gu_throw_fatal <<"Attempt to reuse the same seqno: " << g
-                               <<". New ptr = " << ptr << ", previous ptr = "
-                               << res.first->second;
-            }
+            s2p.insert(g, ptr);
 
             BufferHeader* bh(ptr2BH(ptr));
             bh->seqno_g = g;
@@ -198,8 +192,8 @@ START_TEST(recovery)
             os << "S2P map:\n";
             for (seqno2ptr_t::iterator i = s2p.begin(); i != s2p.end(); ++i)
             {
-                log_info << "\tseqno: " << i->first << ", msg: "
-                         << reinterpret_cast<const char*>(i->second) << "\n";
+                log_info << "\tseqno: " << s2p.index(i) << ", msg: "
+                         << reinterpret_cast<const char*>(*i) << "\n";
             }
 
             log_info << os.str();
@@ -226,23 +220,23 @@ START_TEST(recovery)
 
         void* m(ctx.add_msg(msgs[0]));
         fail_if (NULL == m);
-        fail_if (ctx.s2p.find(msgs[0].g)->second != m);
+        fail_if (*ctx.s2p.find(msgs[0].g) != m);
 
         m = ctx.add_msg(msgs[1]);
         fail_if (NULL == m);
-        fail_if (ctx.s2p.find(msgs[1].g)->second != m);
+        fail_if (*ctx.s2p.find(msgs[1].g) != m);
 
         m = ctx.add_msg(msgs[2]);
         fail_if (NULL == m);
-        fail_if (ctx.s2p.find(msgs[2].g)->second != m);
+        fail_if (*ctx.s2p.find(msgs[2].g) != m);
 
         m = ctx.add_msg(msgs[3]);
         fail_if (NULL == m);
         fail_if (msgs[3].g > 0);
         fail_if (ctx.s2p.find(msgs[3].g) != ctx.s2p.end());
 
-        seqno_min = ctx.s2p.begin()->first;
-        seqno_max = ctx.s2p.rbegin()->first;
+        seqno_min = ctx.s2p.index_front();
+        seqno_max = ctx.s2p.index_back();
     }
 
     /* What we have now is |111222444***|----| */
@@ -265,12 +259,12 @@ START_TEST(recovery)
 
         fail_if(ctx.s2p.empty());
         fail_if(ctx.s2p.size() != 1);
-        fail_if(ctx.s2p.begin()->first == seqno_min);
-        fail_if(ctx.s2p.begin()->first != seqno_max);
+        fail_if(ctx.s2p.index_front() == seqno_min);
+        fail_if(ctx.s2p.index_front() != seqno_max);
 
         void* m(ctx.add_msg(msgs[4]));
         fail_if (NULL == m);
-        fail_if (ctx.s2p.find(msgs[4].g)->second != m);
+        fail_if (*ctx.s2p.find(msgs[4].g) != m);
 
         m = ctx.add_msg(msgs[5]);
         fail_if (NULL == m);
@@ -279,12 +273,12 @@ START_TEST(recovery)
 
         m = ctx.add_msg(msgs[6]);
         fail_if (NULL == m);
-        fail_if (ctx.s2p.find(msgs[6].g)->second != m);
+        fail_if (*ctx.s2p.find(msgs[6].g) != m);
         // here we should have rollover
         fail_if (ptr2BH(m) != BH_cast(ctx.rb.start()));
 
-        seqno_min = ctx.s2p.begin()->first;
-        seqno_max = ctx.s2p.rbegin()->first;
+        seqno_min = ctx.s2p.index_front();
+        seqno_max = ctx.s2p.index_back();
     }
 
     /* What we have now is |555|---|444333***| */
@@ -307,8 +301,8 @@ START_TEST(recovery)
 
         fail_if(ctx0.s2p.empty());
         fail_if(ctx0.s2p.size() != 3);
-        fail_if(ctx0.s2p.begin()->first  != seqno_min);
-        fail_if(ctx0.s2p.rbegin()->first != seqno_max);
+        fail_if(ctx0.s2p.index_front() != seqno_min);
+        fail_if(ctx0.s2p.index_back()  != seqno_max);
 
         /* now try to open unclosed file. Results should be the same */
         rb_ctx ctx(rb_5size);
@@ -325,11 +319,11 @@ START_TEST(recovery)
 
         fail_if(ctx.s2p.empty());
         fail_if(ctx.s2p.size() != 3);
-        fail_if(ctx.s2p.begin()->first  != seqno_min);
-        fail_if(ctx.s2p.rbegin()->first != seqno_max);
+        fail_if(ctx.s2p.index_front() != seqno_min);
+        fail_if(ctx.s2p.index_back()  != seqno_max);
 
-        seqno_min = ctx.s2p.begin()->first;
-        seqno_max = ctx.s2p.rbegin()->first;
+        seqno_min = ctx.s2p.index_front();
+        seqno_max = ctx.s2p.index_back();
     }
 
     size_t const rb_3size(msg_size*3);
@@ -351,16 +345,16 @@ START_TEST(recovery)
 
         fail_if(ctx.s2p.empty());
         fail_if(ctx.s2p.size() != 2);
-        fail_if(ctx.s2p.begin()->first  == seqno_min);
-        fail_if(ctx.s2p.rbegin()->first != seqno_max);
+        fail_if(ctx.s2p.index_begin()  == seqno_min);
+        fail_if(ctx.s2p.index_back() != seqno_max);
 
         void* m(ctx.add_msg(msgs[8]));
         fail_if (NULL == m);
-        fail_if (ctx.s2p.find(msgs[8].g)->second != m);
+        fail_if (*ctx.s2p.find(msgs[8].g) != m);
 
         m = ctx.add_msg(msgs[9]);
         fail_if (NULL == m);
-        fail_if (ctx.s2p.find(msgs[9].g)->second != m);
+        fail_if (*ctx.s2p.find(msgs[9].g) != m);
 
         m = ctx.add_msg(msgs[7]);
         fail_if (NULL == m);
@@ -369,8 +363,8 @@ START_TEST(recovery)
         // here we should have rollover
         fail_if (ptr2BH(m) != BH_cast(ctx.rb.start()));
 
-        seqno_min = ctx.s2p.begin()->first;
-        seqno_max = ctx.s2p.rbegin()->first;
+        seqno_min = ctx.s2p.index_front();
+        seqno_max = ctx.s2p.index_back();
     }
 
     /* what we should have now is |***---777| - only one segment, at the end */
@@ -390,8 +384,8 @@ START_TEST(recovery)
 
         fail_if(ctx0.s2p.empty());
         fail_if(ctx0.s2p.size() != 1);
-        fail_if(ctx0.s2p.begin()->first  != seqno_max);
-        fail_if(ctx0.s2p.rbegin()->first != seqno_max);
+        fail_if(ctx0.s2p.index_front() != seqno_max);
+        fail_if(ctx0.s2p.index_back()  != seqno_max);
 
         /* now try to open unclosed file. Results should be the same */
         rb_ctx ctx(rb_3size);
@@ -408,8 +402,8 @@ START_TEST(recovery)
 
         fail_if(ctx.s2p.empty());
         fail_if(ctx.s2p.size() != 1);
-        fail_if(ctx.s2p.begin()->first  != seqno_max);
-        fail_if(ctx.s2p.rbegin()->first != seqno_max);
+        fail_if(ctx.s2p.index_front() != seqno_max);
+        fail_if(ctx.s2p.index_back()  != seqno_max);
 
         fail_if(seqno_max < 1);
         fail_if(seqno_min != seqno_max);
@@ -440,7 +434,7 @@ START_TEST(recovery)
 
         m = ctx.add_msg(msgs[4]);
         fail_if (NULL == m);
-        fail_if (ctx.s2p.find(msgs[4].g)->second != m);
+        fail_if (*ctx.s2p.find(msgs[4].g) != m);
 
         m = ctx.add_msg(msgs[5]);
         fail_if (NULL == m);
@@ -449,8 +443,8 @@ START_TEST(recovery)
 
         fail_if(ctx.s2p.empty());
         fail_if(ctx.s2p.size() != 1);
-        seqno_min = ctx.s2p.begin()->first;
-        seqno_max = ctx.s2p.rbegin()->first;
+        seqno_min = ctx.s2p.index_front();
+        seqno_max = ctx.s2p.index_back();
         fail_if(seqno_min != seqno_max);
     }
 
@@ -471,8 +465,8 @@ START_TEST(recovery)
 
         fail_if(ctx.s2p.empty());
         fail_if(ctx.s2p.size() != 1);
-        fail_if(seqno_min != ctx.s2p.begin()->first);
-        fail_if(seqno_max != ctx.s2p.rbegin()->first);
+        fail_if(seqno_min != ctx.s2p.index_begin());
+        fail_if(seqno_max != ctx.s2p.index_back());
         fail_if(seqno_min != seqno_max);
     }
 
@@ -493,8 +487,8 @@ START_TEST(recovery)
 
         fail_if(ctx.s2p.empty());
         fail_if(ctx.s2p.size() != 1);
-        fail_if(seqno_min != ctx.s2p.begin()->first);
-        fail_if(seqno_max != ctx.s2p.rbegin()->first);
+        fail_if(seqno_min != ctx.s2p.index_front());
+        fail_if(seqno_max != ctx.s2p.index_back());
         fail_if(seqno_min != seqno_max);
 
         // must be allocated right after the recovered buffer

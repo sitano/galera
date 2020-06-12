@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Codership Oy <info@codership.com>
+ * Copyright (C) 2009-2020 Codership Oy <info@codership.com>
  */
 
 #include "GCache.hpp"
@@ -32,18 +32,16 @@ namespace gcache
 #ifndef NDEBUG
         if (params.debug()) cond.debug_begin();
 #endif
-        for (seqno2ptr_t::iterator i = seqno2ptr.begin();
-             i != seqno2ptr.end() && cond.check();)
+        while (!seqno2ptr.empty() && cond.check())
         {
-            const void* const ptr(i->second);
+            const void* const ptr(seqno2ptr.front());
             BufferHeader* const bh(get_BH(ptr));
 
             if (gu_likely(BH_is_released(bh)))
             {
-                assert (bh->seqno_g == i->first);
+                assert (bh->seqno_g == seqno2ptr.index_begin());
 
                 cond.update(bh);
-                seqno2ptr.erase (i++); // post ++ is significant!
                 discard_buffer(bh, ptr);
             }
             else
@@ -54,6 +52,8 @@ namespace gcache
                 assert(cond.check());
                 return false;
             }
+
+            seqno2ptr.pop_front();
         }
 
         return true;
@@ -119,8 +119,7 @@ namespace gcache
     GCache::discard_seqno (seqno_t seqno)
     {
 
-        seqno_t const start(seqno2ptr.begin() != seqno2ptr.end() ?
-                            seqno2ptr.begin()->first : 0);
+        seqno_t const start(seqno2ptr.empty() ? 0 : seqno2ptr.index_begin());
         assert(start > 0);
 
         DiscardSeqnoCond cond(start, seqno);
@@ -129,20 +128,17 @@ namespace gcache
     }
 
     void
-    GCache::discard_tail (seqno_t seqno)
+    GCache::discard_tail (seqno_t const seqno)
     {
-        seqno2ptr_t::reverse_iterator r;
-        while ((r = seqno2ptr.rbegin()) != seqno2ptr.rend() &&
-               r->first > seqno)
+        while (seqno2ptr.index_back() > seqno && !seqno2ptr.empty())
         {
-            const void* const ptr(r->second);
+            const void* const ptr(seqno2ptr.back());
             BufferHeader* const bh(get_BH(ptr));
 
             assert(BH_is_released(bh));
-            assert(bh->seqno_g == r->first);
-            assert(bh->seqno_g > seqno);
+            assert(bh->seqno_g == seqno2ptr.index_back());
 
-            seqno2ptr.erase(--(seqno2ptr.end()));
+            seqno2ptr.pop_back();
             discard_buffer(bh, ptr);
         }
     }

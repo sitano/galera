@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Codership Oy <info@codership.com>
+ * Copyright (C) 2009-2020 Codership Oy <info@codership.com>
  */
 
 #ifndef __GCACHE_H__
@@ -129,7 +129,7 @@ namespace gcache
          * Mark buffer to be skipped
          */
         void seqno_skip (const void* ptr,
-                         int64_t     seqno_g,
+                         seqno_t     seqno_g,
                          uint8_t     type);
 
         /*!
@@ -140,20 +140,20 @@ namespace gcache
         /*!
          * Returns smallest seqno present in history
          */
-        int64_t seqno_min() const
+        seqno_t seqno_min() const
         {
             gu::Lock lock(mtx);
             if (gu_likely(!seqno2ptr.empty()))
-                return seqno2ptr.begin()->first;
+                return seqno2ptr.index_begin();
             else
-                return -1;
+                return SEQNO_ILL;
         }
 
         /*!
          * Move lock to a given seqno.
          * @throws gu::NotFound if seqno is not in the cache.
          */
-        void  seqno_lock (int64_t const seqno_g);
+        void  seqno_lock (seqno_t const seqno_g);
 
         /*!
          * Get pointer to buffer identified by seqno.
@@ -225,7 +225,7 @@ namespace gcache
          *
          * @retval number of buffers filled (<= v.size())
          */
-        size_t seqno_get_buffers (std::vector<Buffer>& v, int64_t start);
+        size_t seqno_get_buffers (std::vector<Buffer>& v, seqno_t start);
 
         /*!
          * Releases any seqno locks present.
