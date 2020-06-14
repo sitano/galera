@@ -34,6 +34,8 @@ namespace gcache
 #endif
         while (!seqno2ptr.empty() && cond.check())
         {
+            if (seqno2ptr.index_begin() >= seqno_locked) return false;
+
             const void* const ptr(seqno2ptr.front());
             BufferHeader* const bh(get_BH(ptr));
 
