@@ -405,6 +405,7 @@ static void store_cc(gcache::GCache* const gcache,
 
     fail_if(NULL == cc_ptr);
     memcpy(ptx, tmp, cc_size);
+    free(tmp);
 
     gcache->seqno_assign(cc_ptr, i, GCS_ACT_CCHANGE, i > 0);
     gcache->free(cc_ptr);

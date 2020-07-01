@@ -44,6 +44,7 @@
 #include "../gcs_code_msg.hpp"
 
 #include <galerautils.h>
+#include "gu_config.hpp"
 
 #include "gcs_test_utils.hpp"
 #include <gcache_test_encryption.hpp>
@@ -374,14 +375,14 @@ core_test_set_payload_size (ssize_t s)
 
 // Initialises core and backend objects + some common tests
 static inline void
-core_test_init (bool enc, bool bootstrap = true, int const gcs_proto_ver = 1)
+core_test_init (gu::Config* config,
+                bool enc, bool bootstrap = true, int const gcs_proto_ver = 1)
 {
     long     ret;
     action_t act;
 
     mark_point();
 
-    gu::Config* const config(new gu::Config());
     fail_if (config == NULL);
 
     gcs_test::InitConfig(*config, CacheName);
@@ -518,7 +519,9 @@ core_test_cleanup ()
 static void
 test_api(bool const enc)
 {
-    core_test_init (enc);
+    gu::Config config;
+    core_test_init (&config, enc);
+
     fail_if (NULL == Cache);
     fail_if (NULL == Core);
     fail_if (NULL == Backend);
@@ -649,7 +652,8 @@ CORE_TEST_OWN(bool const enc, int gcs_proto_ver)
     gcs_comp_msg_add (prim,     "node1", 0);
     gcs_comp_msg_add (non_prim, "node1", 1);
 
-    core_test_init (enc, true, gcs_proto_ver);
+    gu::Config config;
+    core_test_init (&config, enc, true, gcs_proto_ver);
 
     /////////////////////////////////////////////
     /// check behaviour in transitional state ///
@@ -1057,7 +1061,6 @@ Suite *gcs_core_suite(void)
 
   suite_add_tcase (suite, tcase);
   tcase_set_timeout(tcase, 60);
-
   bool skip = false;
   if (skip == false) {
       tcase_add_test  (tcase, gcs_code_msg);

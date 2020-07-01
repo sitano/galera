@@ -407,7 +407,7 @@ certification_nbo(bool const enc)
           6, 6, 0, 5,
           TrxHandle::F_ISOLATION | TrxHandle::F_COMMIT,
           Certification::TEST_OK,
-          {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0},
+          {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0},
           24
         },
         // 7 should now succeed
@@ -415,7 +415,16 @@ certification_nbo(bool const enc)
           { {void_cast("1"), 1}, }, 1, false,
           7, 7, 0, 6,
           TrxHandle::F_ISOLATION | TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
-          Certification::TEST_OK, {0}, 0}
+          Certification::TEST_OK, {0}, 0},
+        // Complete seqno 5 to clean up
+        { { {2, } }, 8, 8,
+          { {void_cast("2"), 1}, }, 1, false,
+          8, 8, 0, 7,
+          TrxHandle::F_ISOLATION | TrxHandle::F_COMMIT,
+          Certification::TEST_OK,
+          {5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0},
+          24
+        }
     };
 
     size_t nws(sizeof(wsi)/sizeof(wsi[0]));
