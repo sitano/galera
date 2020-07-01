@@ -177,7 +177,7 @@ t2(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
 
     uint64_t const b1(gu::FastHash::digest<uint64_t>(ptr2BH(buf1), alloc_size));
 
-    for (int i(0); i < buf_size; ++i) { static_cast<char*>(ptx)[i] = i; }
+    for (int i(0); i < payload_size; ++i) { static_cast<char*>(ptx)[i] = i; }
     uint64_t const p1(gu::FastHash::digest<uint64_t>(ptx, payload_size));
     mark_point();
 
@@ -203,7 +203,7 @@ t2(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
 
     uint64_t const b3(gu::FastHash::digest<uint64_t>(ptr2BH(buf2), alloc_size));
 
-    for (int i(0); i < buf_size; ++i) { static_cast<char*>(ptx)[i] = i + 1; }
+    for (int i(0); i < payload_size; ++i) { static_cast<char*>(ptx)[i] = i + 1; }
     uint64_t const p2(gu::FastHash::digest<uint64_t>(ptx, payload_size));
     mark_point();
 

@@ -329,6 +329,12 @@ gcache::PageStore::~PageStore ()
         }
     }
 
+    for (PageQueue::iterator i(pages_.begin()); i != pages_.end(); ++i)
+    {
+        delete *i;
+    }
+    pages_.clear();
+
     pthread_attr_destroy (&delete_page_attr_);
 }
 
