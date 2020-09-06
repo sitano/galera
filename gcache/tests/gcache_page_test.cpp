@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2020 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -61,9 +61,9 @@ t1(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
     gcache::PageStore ps(dir_name, cb, app_ctx, keep_size, page_size, page_size,
                          0, false);
 
-    fail_if(ps.count()       != 0,"expected count 0, got %zu",ps.count());
-    fail_if(ps.total_pages() != 0,"expected 0 pages, got %zu",ps.total_pages());
-    fail_if(ps.total_size()  != 0,"expected size 0, got %zu", ps.total_size());
+    ck_assert_msg(ps.count()       == 0,"expected count 0, got %zu",ps.count());
+    ck_assert_msg(ps.total_pages() == 0,"expected 0 pages, got %zu",ps.total_pages());
+    ck_assert_msg(ps.total_size()  == 0,"expected size 0, got %zu", ps.total_size());
 
     ps.set_enc_key(key);
 
@@ -74,42 +74,44 @@ t1(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
     size_t size(sizeof(data) + bh_size);
     void* buf(ps.malloc(size, ptx));
 
-    fail_if(NULL == buf);
-    fail_if(NULL == ptx);
-    fail_if(ps.count()       != 1,"expected count 1, got %zu",ps.count());
-    fail_if(ps.total_pages() != 1,"expected 1 pages, got %zu",ps.total_pages());
+    ck_assert(NULL != buf);
+    ck_assert(NULL != ptx);
+    ck_assert_msg(ps.count()       == 1,"expected count 1, got %zu",ps.count());
+    ck_assert_msg(ps.total_pages() == 1,"expected 1 pages, got %zu",ps.total_pages());
 
     ::memset(buf, 0, sizeof(data));/* initialize just for the sake of the test */
     ::memcpy(ptx, data, sizeof(data));
 
     if (!enc) // in-place realloc is not supported for encryuption
     {
-        fail_if(buf != ptx);
+        ck_assert(buf == ptx);
 
         size -= 1;
         void* tmp = ps.realloc (buf, size);
 
-        fail_if(buf != tmp);
-        fail_if(ps.count()       != 1,"expected count 1, got %zu",ps.count());
-        fail_if(ps.total_pages() != 1,
-                "expected 1 pages, got %zu", ps.total_pages());
+        ck_assert(buf == tmp);
+        ck_assert_msg(ps.count()       == 1,
+                      "expected count 1, got %zu", ps.count());
+        ck_assert_msg(ps.total_pages() == 1,
+                      "expected 1 pages, got %zu", ps.total_pages());
 
         size += gcache::Page::ALIGNMENT;
         // the following should fail as new page needs to be allocated
         tmp = ps.realloc (buf, size);
 
-        fail_if(0   != tmp);
-        fail_if(buf == tmp);
-        fail_if(ps.count()       != 1,"expected count 1, got %zu",ps.count());
-        fail_if(ps.total_pages() != 1,
-                "expected 1 pages, got %zu", ps.total_pages());
+        ck_assert(0   == tmp);
+        ck_assert(buf != tmp);
+        ck_assert_msg(ps.count()       == 1,
+                      "expected count 1, got %zu", ps.count());
+        ck_assert_msg(ps.total_pages() == 1,
+                      "expected 1 pages, got %zu", ps.total_pages());
     }
     else
     {
-        fail_if(buf == ptx);
+        ck_assert(buf != ptx);
         /* the following has a probability of failure 1/16M due to a certain
          * randomization in PageStore constructor... */
-        fail_if(!::memcmp(buf, ptx, sizeof(data)));
+        ck_assert(0 != ::memcmp(buf, ptx, sizeof(data)));
     }
 
     BH(buf)->seqno_g = 1; // prevent ditching the buffer and the page on free
@@ -124,17 +126,17 @@ t1(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
     if (enc)
     {
         const void* ptc(ps.get_plaintext(buf));
-        fail_if(!::memcmp(buf, ptc, sizeof(data)));
-        fail_if(::memcmp(data, ptc, sizeof(data)));
+        ck_assert(0 != ::memcmp(buf,  ptc, sizeof(data)));
+        ck_assert(0 == ::memcmp(data, ptc, sizeof(data)));
         ps.drop_plaintext(buf);
     }
     mark_point();
     ps.discard (BH(buf), buf);
     mark_point();
 
-    fail_if(ps.count()       != 1,"expected count 1, got %zu",ps.count());
-    fail_if(ps.total_pages() != 0,"expected 0 pages, got %zu",ps.total_pages());
-    fail_if(ps.total_size()  != 0,"expected size 0, got %zu", ps.total_size());
+    ck_assert_msg(ps.count()       == 1,"expected count 1, got %zu",ps.count());
+    ck_assert_msg(ps.total_pages() == 0,"expected 0 pages, got %zu",ps.total_pages());
+    ck_assert_msg(ps.total_size()  == 0,"expected size 0, got %zu", ps.total_size());
 }
 
 START_TEST(test1)
@@ -171,9 +173,9 @@ t2(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
 
     void* ptx;
     uint8_t* buf1 = static_cast<uint8_t*>(ps.malloc(buf_size, ptx));
-    fail_if (0 == buf1);
-    fail_if (0 == ptx);
-    if (enc) { fail_if(ptx == buf1); } else { fail_if(ptx != buf1); }
+    ck_assert(0 != buf1);
+    ck_assert(0 != ptx);
+    if (enc) { ck_assert(ptx != buf1); } else { ck_assert(ptx == buf1); }
 
     uint64_t const b1(gu::FastHash::digest<uint64_t>(ptr2BH(buf1), alloc_size));
 
@@ -188,18 +190,18 @@ t2(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
         /* should not flush plaintext yet:
          * plaintext size limit set at page_size/2 - greater than currently
          * allocated size  */
-        fail_if(b1 != b2);
+        ck_assert(b1 == b2);
     }
     else
     {
         /* should write directly to mmapped buffer */
-        fail_if(b1 == b2);
+        ck_assert(b1 != b2);
     }
 
     uint8_t* buf2 = static_cast<uint8_t*>(ps.malloc(buf_size, ptx));
-    fail_if (0 == buf2);
-    fail_if (0 == ptx);
-    if (enc) { fail_if(ptx == buf2); } else { fail_if(ptx != buf2); }
+    ck_assert(0 != buf2);
+    ck_assert(0 != ptx);
+    if (enc) { ck_assert(ptx != buf2); } else { ck_assert(ptx == buf2); }
 
     uint64_t const b3(gu::FastHash::digest<uint64_t>(ptr2BH(buf2), alloc_size));
 
@@ -209,32 +211,32 @@ t2(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
 
     if (enc) ps.drop_plaintext(buf2);
     uint64_t const b4(gu::FastHash::digest<uint64_t>(ptr2BH(buf2), alloc_size));
-    fail_if(b3 == b4, "this time ptx should have been flushed");
+    ck_assert_msg(b3 != b4, "this time ptx should have been flushed");
 
     /* slave queue */
 
     const void* ptc(enc ? ps.get_plaintext(buf1) : buf1);
     uint64_t const p3(gu::FastHash::digest<uint64_t>(ptc, payload_size));
-    fail_if(p1 != p3);
+    ck_assert(p1 == p3);
 
     BufferHeader* const bh1(BH(buf1));
     ps_free(ps, bh1, buf1); /* ptx should be flushed, and buf1 discarded
                              * but the page stays and buf1 is still accessible */
     uint64_t const b5(gu::FastHash::digest<uint64_t>(ptr2BH(buf1), alloc_size));
-    fail_if(b5 == b2);
-    fail_if(0 == ps.total_pages(), "1");
+    ck_assert(b5 != b2);
+    ck_assert_msg(0 != ps.total_pages(), "1");
     // ps.discard (bh1, buf1); discard happens only for ordered buffers
-    fail_if(0 == ps.total_pages(), "2");
+    ck_assert_msg(0 != ps.total_pages(), "2");
 
     ptc = enc ? ps.get_plaintext(buf2) : buf2;
     uint64_t const p4(gu::FastHash::digest<uint64_t>(ptc, payload_size));
-    fail_if(p2 != p4);
+    ck_assert(p2 == p4);
 
     BufferHeader* const bh2(enc ? ps.get_BH(buf2, true) : ptr2BH(buf2));
     bh2->seqno_g = 1; /* assigned seqno to prevent free() from discarding buf2 */
     ps_free(ps, bh2, buf2); /* BH should be marked released */
     uint64_t const b6(gu::FastHash::digest<uint64_t>(ptr2BH(buf2), alloc_size));
-    fail_if(b6 == b4);
+    ck_assert(b6 != b4);
     ps.discard (bh2, buf2);
 }
 
@@ -271,17 +273,17 @@ t3(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
 
     void* ptx;
     void* ptr1 = ps.malloc(ptr_size, ptx);
-    fail_if (0 == ptr1);
+    ck_assert(0 != ptr1);
 
     void* ptr2 = ps.malloc(ptr_size, ptx);
-    fail_if (0 == ptr2);
+    ck_assert(0 != ptr2);
 
-    fail_if (ps.count() != 1, "ps.count() = %zd, expected 1", ps.count());
+    ck_assert_msg(ps.count() == 1, "ps.count() = %zd, expected 1", ps.count());
 
     // check that ptr2 is adjacent to ptr1
     void* tmp = static_cast<uint8_t*>(ptr1) + ptr_size;
 
-    fail_if (tmp != ptr2, "tmp = %p, ptr2 = %p", tmp, ptr2);
+    ck_assert_msg(tmp == ptr2, "tmp = %p, ptr2 = %p", tmp, ptr2);
 
     BufferHeader* const bh2(BH(ptr2));
     ps_free(ps, bh2, ptr2);
@@ -311,107 +313,121 @@ t4(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
 
     gcache::PageStore ps(dir_name, cb, app_ctx, keep_size, page_size, page_size,
                          PageStore::DEBUG, false);
-    fail_if(ps.count() != 0);
-    fail_if(ps.total_pages() != 0);
+    ck_assert(ps.count() == 0);
+    ck_assert(ps.total_pages() == 0);
 
     get_BH BH(ps, enc);
 
     ps.set_enc_key(key); /* key change should allocate new page */
-    fail_if(ps.count() != 1);
-    fail_if(ps.total_pages() != 1);
+    ck_assert(ps.count() == 1);
+    ck_assert(ps.total_pages() == 1);
 
     void* ptx1;
     void* ptr1(ps.malloc(alloc_size, ptx1));
-    fail_if(NULL == ptx1);
-    fail_if(NULL == ptr1);
+    ck_assert(NULL != ptx1);
+    ck_assert(NULL != ptr1);
     expect = 1;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     void* ptx2;
     void* ptr2(ps.malloc(alloc_size, ptx2));
-    fail_if(NULL == ptx2);
-    fail_if(NULL == ptr2);
+    ck_assert(NULL != ptx2);
+    ck_assert(NULL != ptr2);
     expect = 2;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     void* ptx3;
     void* ptr3(ps.malloc(alloc_size, ptx3));
-    fail_if(NULL == ptx3);
-    fail_if(NULL == ptr3);
+    ck_assert(NULL != ptx3);
+    ck_assert(NULL != ptr3);
     expect = 3;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     void* ptx4;
     void* ptr4(ps.malloc(alloc_size, ptx4));
-    fail_if(NULL == ptx4);
-    fail_if(NULL == ptr4);
+    ck_assert(NULL != ptx4);
+    ck_assert(NULL != ptr4);
     expect = 4;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     ps_free(ps, BH(ptr1), ptr1);
     expect = keep_pages;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     ps_free(ps, BH(ptr2), ptr2);
     expect = keep_pages;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     void* ptx5;
     void* ptr5(ps.malloc(alloc_size, ptx5));
-    fail_if(NULL == ptx5);
-    fail_if(NULL == ptr5);
+    ck_assert(NULL != ptx5);
+    ck_assert(NULL != ptr5);
     expect = 3;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     ps_free(ps, BH(ptr5), ptr5);
     expect = 3;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     ps_free(ps, BH(ptr4), ptr4);
     expect = 3;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     void* ptx6;
     void* ptr6(ps.malloc(alloc_size, ptx6));
-    fail_if(NULL == ptx6);
-    fail_if(NULL == ptr6);
+    ck_assert(NULL != ptx6);
+    ck_assert(NULL != ptr6);
     expect = 4; // page 3 is still locked
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     ps_free(ps, BH(ptr6), ptr6);
     expect = 4; // page 3 is still locked
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     void* ptx7;
     void* ptr7(ps.malloc(alloc_size, ptx7));
-    fail_if(NULL == ptx7);
-    fail_if(NULL == ptr7);
+    ck_assert(NULL != ptx7);
+    ck_assert(NULL != ptr7);
     expect = 5;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     ps_free(ps, BH(ptr7), ptr7);
     expect = 5;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
     ps_free(ps, BH(ptr3), ptr3);
     expect = keep_pages;
-    fail_if(ps.total_pages() != expect, "Expected total_pages() = %d, got %d",
-            expect, ps.total_pages());
+    ck_assert_msg(ps.total_pages() == expect,
+                  "Expected total_pages() = %d, got %d",
+                  expect, ps.total_pages());
 
-    fail_if(ps.count() != 7);
+    ck_assert(ps.count() == 7);
 }
 
 START_TEST(test4) // check that pages linger correctly and get deleted as they

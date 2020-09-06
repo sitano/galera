@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Codership Oy <info@codership.com>
+ * Copyright (C) 2019-2020 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -27,14 +27,14 @@ static_assert(sizeof(source) == 83, "source length is not a prime number");
 /* tests empty message encryption */
 static void
 do_null_test(wsrep_encrypt_cb_t const cb, void* app_ctx,
-	     size_t const blocksize)
+             size_t const blocksize)
 {
     wsrep_buf_t in = { NULL, 0 };
     char out(0);
 
     int ret(cb(app_ctx, &ctx11, &in, &out, WSREP_ENC, true));
-    fail_if(ret != 0);
-    fail_if(out != 0);
+    ck_assert(ret == 0);
+    ck_assert(out == 0);
 }
 
 START_TEST(null_test)
@@ -54,34 +54,35 @@ do_fin_test(wsrep_encrypt_cb_t const cb, void* app_ctx, size_t const blocksize)
     char cipher21[sizeof(source)];
 
     int ret(cb(app_ctx, &ctx11, &orig, cipher11, WSREP_ENC, true));
-    fail_if(ret != sizeof(source));
-    fail_if(!::memcmp(orig.ptr, cipher11, ret));
+    ck_assert(ret == sizeof(source));
+    ck_assert(0 != ::memcmp(orig.ptr, cipher11, ret));
 
     ret = cb(app_ctx, &ctx12, &orig, cipher12, WSREP_ENC, true);
-    fail_if(ret != sizeof(source));
-    fail_if(!::memcmp(orig.ptr, cipher12, ret));
-    fail_if(!::memcmp(cipher11, cipher12, ret));
+    ck_assert(ret == sizeof(source));
+    ck_assert(0 != ::memcmp(orig.ptr, cipher12, ret));
+    ck_assert(0 != ::memcmp(cipher11, cipher12, ret));
 
     ret = cb(app_ctx, &ctx21, &orig, cipher21, WSREP_ENC, true);
-    fail_if(ret != sizeof(source));
-    fail_if(!::memcmp(orig.ptr, cipher21, ret));
-    fail_if(!::memcmp(cipher11, cipher21, ret));
+    ck_assert(ret == sizeof(source));
+    ck_assert(0 != ::memcmp(orig.ptr, cipher21, ret));
+    ck_assert(0 != ::memcmp(cipher11, cipher21, ret));
 
     wsrep_buf_t res = { cipher11, sizeof(cipher11) };
     char plain[sizeof(cipher11)];
 
     ret = cb(app_ctx, &ctx11, &res, plain, WSREP_DEC, true);
-    fail_if(ret != sizeof(cipher11));
-    fail_if(::memcmp(orig.ptr, plain, ret), "Expected:\n%s\nGot:\n%s",
-            static_cast<const char*>(orig.ptr), plain);
+    ck_assert(ret == sizeof(cipher11));
+    ck_assert_msg(0 == ::memcmp(orig.ptr, plain, ret),
+                  "Expected:\n%s\nGot:\n%s",
+                  static_cast<const char*>(orig.ptr), plain);
 
     ret = cb(app_ctx, &ctx12, &res, plain, WSREP_DEC, true);
-    fail_if(ret != sizeof(cipher11));
-    fail_if(!::memcmp(orig.ptr, plain, ret));
+    ck_assert(ret == sizeof(cipher11));
+    ck_assert(0 != ::memcmp(orig.ptr, plain, ret));
 
     ret = cb(app_ctx, &ctx21, &res, plain, WSREP_DEC, true);
-    fail_if(ret != sizeof(cipher11));
-    fail_if(!::memcmp(orig.ptr, plain, ret));
+    ck_assert(ret == sizeof(cipher11));
+    ck_assert(0 != ::memcmp(orig.ptr, plain, ret));
 }
 
 START_TEST(fin_test)
@@ -93,7 +94,7 @@ END_TEST
 /* test stream encryption */
 static void
 do_stream_test(wsrep_encrypt_cb_t const cb, void* app_ctx,
-	       size_t const blocksize)
+               size_t const blocksize)
 {
     assert(sizeof(source) % blocksize);
     wsrep_enc_ctx_t const comp_ctx = ctx11;
@@ -102,8 +103,8 @@ do_stream_test(wsrep_encrypt_cb_t const cb, void* app_ctx,
     {
         wsrep_buf_t in = { source, sizeof(source) };
         int ret(cb(app_ctx, &ctx11, &in, cipher1sweep, WSREP_ENC, true));
-        fail_if(ret != sizeof(source));
-        fail_if(::memcmp(&comp_ctx, &ctx11, sizeof(ctx11)));
+        ck_assert(ret == sizeof(source));
+        ck_assert(0 == ::memcmp(&comp_ctx, &ctx11, sizeof(ctx11)));
     }
 
     char cipher[sizeof(source)];
@@ -116,17 +117,17 @@ do_stream_test(wsrep_encrypt_cb_t const cb, void* app_ctx,
         wsrep_buf_t in = { src, (ret != 0 ? left/2 : left) };
         ret = cb(app_ctx, &ctx11, &in, out, WSREP_ENC, 0 == ret);
 
-        fail_if(ret < 0);
-        fail_if(ret > int(in.len));
+        ck_assert(ret >= 0);
+        ck_assert(ret <= int(in.len));
         src += ret;
         out += ret;
         left-= ret;
     }
 
-    fail_if(left != 0);
-    fail_if(!::memcmp(source, cipher, sizeof(source)));
-    fail_if(::memcmp(cipher1sweep, cipher, sizeof(cipher)));
-    fail_if(::memcmp(&comp_ctx, &ctx11, sizeof(ctx11)));
+    ck_assert(left == 0);
+    ck_assert(0 != ::memcmp(source, cipher, sizeof(source)));
+    ck_assert(0 == ::memcmp(cipher1sweep, cipher, sizeof(cipher)));
+    ck_assert(0 == ::memcmp(&comp_ctx, &ctx11, sizeof(ctx11)));
 
     char plain [sizeof(source)];
     ret = -1;
@@ -138,17 +139,17 @@ do_stream_test(wsrep_encrypt_cb_t const cb, void* app_ctx,
         wsrep_buf_t in = { src, (ret != 0 ? left/2 : left) };
         ret = cb(app_ctx, &ctx11, &in, out, WSREP_DEC, 0 == ret);
 
-        fail_if(ret < 0);
-        fail_if(ret > int(in.len));
+        ck_assert(ret >= 0);
+        ck_assert(ret <= int(in.len));
         src += ret;
         out += ret;
         left-= ret;
     }
 
-    fail_if(left != 0);
-    fail_if(::memcmp(source, plain, sizeof(source)), "Expected:\n%s\nGot:\n%s",
-            source, plain);
-    fail_if(::memcmp(&comp_ctx, &ctx11, sizeof(ctx11)));
+    ck_assert(left == 0);
+    ck_assert_msg(0 == ::memcmp(source, plain, sizeof(source)),
+                  "Expected:\n%s\nGot:\n%s", source, plain);
+    ck_assert(0 == ::memcmp(&comp_ctx, &ctx11, sizeof(ctx11)));
 }
 
 START_TEST(stream_test)

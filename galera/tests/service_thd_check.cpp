@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2020 Codership Oy <info@codership.com>
  */
 #define __STDC_FORMAT_MACROS
 
@@ -19,7 +19,7 @@ thd1(bool const enc)
 {
     TestEnv env("service_thd_check", enc);
     ServiceThd* thd = new ServiceThd(env.gcs(), env.gcache());
-    fail_if (thd == 0);
+    ck_assert(thd != 0);
     delete thd;
 }
 
@@ -46,7 +46,7 @@ thd2(bool const enc)
     DummyGcs& conn(env.gcs());
     ServiceThd* thd = new ServiceThd(conn, env.gcache());
     gu::UUID const state_uuid(NULL, 0);
-    fail_if (thd == 0);
+    ck_assert(thd != 0);
 
     conn.set_last_applied(gu::GTID(state_uuid, 0));
 
@@ -54,24 +54,24 @@ thd2(bool const enc)
     thd->report_last_committed (seqno);
     thd->flush(state_uuid);
     WAIT_FOR(conn.last_applied() == seqno);
-    fail_if (conn.last_applied() != seqno,
-             "seqno = %" PRId64 ", expected %" PRId64, conn.last_applied(),
-             seqno);
+    ck_assert_msg(conn.last_applied() == seqno,
+                  "seqno = %" PRId64 ", expected %" PRId64,
+                  conn.last_applied(), seqno);
 
     seqno = 5;
     thd->report_last_committed (seqno);
     thd->flush(state_uuid);
     WAIT_FOR(conn.last_applied() == seqno);
-    fail_if (conn.last_applied() != seqno,
-             "seqno = %" PRId64 ", expected %" PRId64, conn.last_applied(),
-             seqno);
+    ck_assert_msg(conn.last_applied() == seqno,
+                  "seqno = %" PRId64 ", expected %" PRId64,
+                  conn.last_applied(), seqno);
 
     thd->report_last_committed (3);
     thd->flush(state_uuid);
     WAIT_FOR(conn.last_applied() == seqno);
-    fail_if (conn.last_applied() != seqno,
-             "seqno = %" PRId64 ", expected %" PRId64, conn.last_applied(),
-             seqno);
+    ck_assert_msg(conn.last_applied() == seqno,
+                  "seqno = %" PRId64 ", expected %" PRId64,
+                  conn.last_applied(), seqno);
 
     thd->reset();
 
@@ -79,9 +79,9 @@ thd2(bool const enc)
     thd->report_last_committed (seqno);
     thd->flush(state_uuid);
     WAIT_FOR(conn.last_applied() == seqno);
-    fail_if (conn.last_applied() != seqno,
-             "seqno = %" PRId64 ", expected %" PRId64, conn.last_applied(),
-             seqno);
+    ck_assert_msg(conn.last_applied() == seqno,
+                  "seqno = %" PRId64 ", expected %" PRId64,
+                  conn.last_applied(), seqno);
 
     delete thd;
 }
@@ -103,7 +103,7 @@ thd3(bool const enc)
 {
     TestEnv env("service_thd_check", enc);
     ServiceThd* thd = new ServiceThd(env.gcs(), env.gcache());
-    fail_if (thd == 0);
+    ck_assert(thd != 0);
     // so far for empty GCache the following should be a noop.
     thd->release_seqno(-1);
     thd->release_seqno(2345);
