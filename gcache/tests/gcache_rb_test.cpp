@@ -42,7 +42,7 @@ START_TEST(test1)
     {
         std::ostringstream os;
         os << "Expected GID: " << GID << ", got: " << gid;
-        ck_abort_msg(os.str().c_str());
+        ck_abort_msg("%s", os.str().c_str());
     }
 
     void* buf1 = rb.malloc (rb_size/2 + 1);
@@ -214,7 +214,7 @@ START_TEST(recovery)
         {
             std::ostringstream os;
             os << "Expected GID: " << GID << ", got: " << ctx.gid;
-            ck_abort_msg(os.str().c_str());
+            ck_abort_msg("%s", os.str().c_str());
         }
 
         ck_assert(ctx.s2p.empty());
@@ -255,7 +255,7 @@ START_TEST(recovery)
         {
             std::ostringstream os;
             os << "Expected GID: " << GID << ", got: " << ctx.gid;
-            ck_abort_msg(os.str().c_str());
+            ck_abort_msg("%s", os.str().c_str());
         }
 
         ck_assert(!ctx.s2p.empty());
@@ -297,7 +297,7 @@ START_TEST(recovery)
         {
             std::ostringstream os;
             os << "Expected GID: " << GID << ", got: " << ctx0.gid;
-            ck_abort_msg(os.str().c_str());
+            ck_abort_msg("%s", os.str().c_str());
         }
 
         ck_assert(!ctx0.s2p.empty());
@@ -315,7 +315,7 @@ START_TEST(recovery)
         {
             std::ostringstream os;
             os << "Expected GID: " << GID << ", got: " << ctx.gid;
-            ck_abort_msg(os.str().c_str());
+            ck_abort_msg("%s", os.str().c_str());
         }
 
         ck_assert(!ctx.s2p.empty());
@@ -341,7 +341,7 @@ START_TEST(recovery)
         {
             std::ostringstream os;
             os << "Expected GID: " << GID << ", got: " << ctx.gid;
-            ck_abort_msg(os.str().c_str());
+            ck_abort_msg("%s", os.str().c_str());
         }
 
         ck_assert(!ctx.s2p.empty());
@@ -380,7 +380,7 @@ START_TEST(recovery)
         {
             std::ostringstream os;
             os << "Expected GID: " << GID << ", got: " << ctx0.gid;
-            ck_abort_msg(os.str().c_str());
+            ck_abort_msg("%s", os.str().c_str());
         }
 
         ck_assert(!ctx0.s2p.empty());
@@ -398,7 +398,7 @@ START_TEST(recovery)
         {
             std::ostringstream os;
             os << "Expected GID: " << GID << ", got: " << ctx.gid;
-            ck_abort_msg(os.str().c_str());
+            ck_abort_msg("%s", os.str().c_str());
         }
 
         ck_assert(!ctx.s2p.empty());
@@ -424,7 +424,7 @@ START_TEST(recovery)
         {
             std::ostringstream os;
             os << "Expected GID: " << GID << ", got: " << ctx.gid;
-            ck_abort_msg(os.str().c_str());
+            ck_abort_msg("%s", os.str().c_str());
         }
 
         ck_assert(ctx.s2p.empty());
@@ -461,7 +461,7 @@ START_TEST(recovery)
         {
             std::ostringstream os;
             os << "Expected GID: " << GID << ", got: " << ctx.gid;
-            ck_abort_msg(os.str().c_str());
+            ck_abort_msg("%s", os.str().c_str());
         }
 
         ck_assert(!ctx.s2p.empty());
@@ -483,7 +483,7 @@ START_TEST(recovery)
         {
             std::ostringstream os;
             os << "Expected GID: " << GID << ", got: " << ctx.gid;
-            ck_abort_msg(os.str().c_str());
+            ck_abort_msg("%s", os.str().c_str());
         }
 
         ck_assert(!ctx.s2p.empty());

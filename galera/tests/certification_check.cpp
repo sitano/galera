@@ -9,6 +9,8 @@
 
 #include "galera_test_env.hpp"
 
+#include "gu_inttypes.hpp"
+
 #include <check.h>
 
 namespace

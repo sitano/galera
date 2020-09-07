@@ -158,11 +158,11 @@ core_recv_thread (void* arg)
 }
 
 // this macro logs errors from within a function
-#define FAIL_IF(expr, format, ...)                            \
-    if (expr) {                                               \
-        gu_fatal ("FAIL: " format, __VA_ARGS__, NULL);        \
-        ck_assert_msg(false, format, __VA_ARGS__, NULL);      \
-        return true;                                          \
+#define FAIL_IF(expr, format, ...)                                      \
+    if (expr) {                                                         \
+        gu_fatal ("FAIL: " format, __VA_ARGS__);                  \
+        ck_assert_msg(false, format, __VA_ARGS__);                \
+        return true;                                                    \
     }
 
 // Start a thread to receive an action
@@ -188,7 +188,7 @@ static bool COMMON_RECV_CHECKS(action_t*      act,
                               Cache->get_ro_plaintext(act->out) : act->out);
 
     FAIL_IF (size != UNKNOWN_SIZE && size != act->size,
-             "gcs_core_recv(): expected size %d, returned %d (%s)",
+             "gcs_core_recv(): expected size %d, returned %zd (%s)",
              size, act->size, strerror (-act->size));
     FAIL_IF (act->type != type,
              "type does not match: expected %d, got %d", type, act->type);
@@ -262,7 +262,7 @@ static bool CORE_RECV_END(action_t*      act,
     {
         int ret = gu_thread_join (act->thread, NULL);
         act->thread = GU_THREAD_INITIALIZER;
-        FAIL_IF(0 != ret, "Failed to join recv thread: %ld (%s)",
+        FAIL_IF(0 != ret, "Failed to join recv thread: %l (%s)",
                 ret, strerror (ret));
     }
 
@@ -443,7 +443,7 @@ core_test_init (gu::Config* config,
 
     // try to send an action to check that everything's alright
     ret = gcs_core_send (Core, act1, sizeof(act1_str), GCS_ACT_WRITESET);
-    ck_assert_msg(ret == sizeof(act1_str), "Expected %d, got %d (%s)",
+    ck_assert_msg(ret == sizeof(act1_str), "Expected %zu, got %ld (%s)",
                   sizeof(act1_str), ret, strerror (-ret));
     gu_warn ("Next CORE_RECV_ACT fails under valgrind");
     act.in = act1;
@@ -624,11 +624,14 @@ DUMMY_INSTALL_COMPONENT (gcs_backend_t* backend, const gcs_comp_msg_t* comp)
 
     action_t act;
 
-    FAIL_IF (gcs_dummy_set_component(Backend, comp), "", NULL);
-    FAIL_IF (DUMMY_INJECT_COMPONENT (Backend, comp), "", NULL);
-    FAIL_IF (CORE_RECV_ACT (&act, NULL, UNKNOWN_SIZE, GCS_ACT_CCHANGE), "",NULL);
+    FAIL_IF (gcs_dummy_set_component(Backend, comp), "%s",
+             "gcs_dummy_set_component");
+    FAIL_IF (DUMMY_INJECT_COMPONENT (Backend, comp), "%s",
+             "DUMMY_INJECT_COMPONENT");
+    FAIL_IF (CORE_RECV_ACT (&act, NULL, UNKNOWN_SIZE, GCS_ACT_CCHANGE), "%",
+             "CORE_RECV_ACT");
     FAIL_IF (core_test_check_conf(act.out, act.size, primary, my_idx, members),
-             "", NULL);
+             "%s", "core_test_check_conf");
 
     return false;
 }

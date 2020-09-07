@@ -168,15 +168,9 @@ gt_node::deliver_last_applied(int const from, gcs_seqno_t const la)
 {
     gcs_seqno_t buf(gcs_seqno_htog(la));
 
-    gcs_recv_msg_t const msg =
-    {
-        .buf        = &buf,
-        .buf_len    = sizeof(buf),
-        .size       = sizeof(buf),
-        .sender_idx = from,
-        .type       = GCS_MSG_LAST
-    };
-
+    gcs_recv_msg_t const msg(&buf, sizeof(buf), sizeof(buf),
+                             from,
+                             GCS_MSG_LAST);
     return gcs_group_handle_last_msg(group(), &msg);
 }
 
@@ -188,11 +182,11 @@ gt_node::gt_node(const char* const name,
 {
     if (name)
     {
-        snprintf(id, sizeof(id - 1), "%s", name);
+        snprintf(id, sizeof(id) - 1, "%s", name);
     }
     else
     {
-        snprintf(id, sizeof(id - 1), "%p", this);
+        snprintf(id, sizeof(id) - 1, "%p", this);
     }
 
     id[sizeof(id) - 1] = '\0';
@@ -500,8 +494,8 @@ gt_group::sst_start (int const joiner_idx,const char* donor_name)
         // sst request is expected to be dynamically allocated
         void* ptx; // plaintext buffer
         char* const req_buf = (char*)gcache->malloc(req_len, ptx);
-        ck_assert_msg(NULL != req_buf);
-        ck_assert_msg(NULL != ptx);
+        ck_assert(NULL != req_buf);
+        ck_assert(NULL != ptx);
         sprintf (static_cast<char*>(ptx), "%s", donor_name);
         gcache->drop_plaintext(req_buf);
 
@@ -519,13 +513,13 @@ gt_group::sst_start (int const joiner_idx,const char* donor_name)
         }
 
         if (i == joiner_idx) {
-            ck_assert_msg(ret == req_len);
+            ck_assert(ret == req_len);
             gcache->free(req_buf); // passed to joiner
         }
         else {
             if (ret > 0) {
                 if (donor_idx < 0) {
-                    ck_assert_msg(req.id == i);
+                    ck_assert(req.id == i);
                     donor_idx = i;
                     gcache->free(req_buf); // passed to donor
                 }
