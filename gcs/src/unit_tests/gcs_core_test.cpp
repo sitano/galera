@@ -234,16 +234,16 @@ static bool COMMON_RECV_CHECKS(action_t*      act,
             // local action buffer should not be copied
             FAIL_IF (act->local != act->in,
                      "Received buffer ptr is not the same as sent: %p != %p",
-                     act->in, act->local, NULL);
+                     act->in, act->local);
             FAIL_IF (memcmp (buf, out_ptx, act->size),
                      "Received buffer contents is not the same as sent: "
                      "'%s' != '%s'", buf, (char*)out_ptx);
         }
         else {
             FAIL_IF (act->local == buf,
-                     "Received the same buffer ptr as sent", NULL);
+                     "Received the same buffer ptr as sent%s", "");
             FAIL_IF (memcmp (buf, out_ptx, act->size),
-                     "Received buffer contents is not the same as sent", NULL);
+                     "Received buffer contents is not the same as sent%s", "");
         }
     }
 
@@ -262,7 +262,7 @@ static bool CORE_RECV_END(action_t*      act,
     {
         int ret = gu_thread_join (act->thread, NULL);
         act->thread = GU_THREAD_INITIALIZER;
-        FAIL_IF(0 != ret, "Failed to join recv thread: %l (%s)",
+        FAIL_IF(0 != ret, "Failed to join recv thread: %d (%s)",
                 ret, strerror (ret));
     }
 
@@ -628,7 +628,7 @@ DUMMY_INSTALL_COMPONENT (gcs_backend_t* backend, const gcs_comp_msg_t* comp)
              "gcs_dummy_set_component");
     FAIL_IF (DUMMY_INJECT_COMPONENT (Backend, comp), "%s",
              "DUMMY_INJECT_COMPONENT");
-    FAIL_IF (CORE_RECV_ACT (&act, NULL, UNKNOWN_SIZE, GCS_ACT_CCHANGE), "%",
+    FAIL_IF (CORE_RECV_ACT (&act, NULL, UNKNOWN_SIZE, GCS_ACT_CCHANGE), "%s",
              "CORE_RECV_ACT");
     FAIL_IF (core_test_check_conf(act.out, act.size, primary, my_idx, members),
              "%s", "core_test_check_conf");

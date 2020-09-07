@@ -328,7 +328,7 @@ t4(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
     ck_assert(NULL != ptr1);
     expect = 1;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     void* ptx2;
@@ -337,7 +337,7 @@ t4(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
     ck_assert(NULL != ptr2);
     expect = 2;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     void* ptx3;
@@ -346,7 +346,7 @@ t4(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
     ck_assert(NULL != ptr3);
     expect = 3;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     void* ptx4;
@@ -355,19 +355,19 @@ t4(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
     ck_assert(NULL != ptr4);
     expect = 4;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     ps_free(ps, BH(ptr1), ptr1);
     expect = keep_pages;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     ps_free(ps, BH(ptr2), ptr2);
     expect = keep_pages;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     void* ptx5;
@@ -376,19 +376,19 @@ t4(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
     ck_assert(NULL != ptr5);
     expect = 3;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     ps_free(ps, BH(ptr5), ptr5);
     expect = 3;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     ps_free(ps, BH(ptr4), ptr4);
     expect = 3;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     void* ptx6;
@@ -397,13 +397,13 @@ t4(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
     ck_assert(NULL != ptr6);
     expect = 4; // page 3 is still locked
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     ps_free(ps, BH(ptr6), ptr6);
     expect = 4; // page 3 is still locked
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     void* ptx7;
@@ -412,19 +412,19 @@ t4(wsrep_encrypt_cb_t cb, void* app_ctx, const gcache::Page::EncKey& key)
     ck_assert(NULL != ptr7);
     expect = 5;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     ps_free(ps, BH(ptr7), ptr7);
     expect = 5;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     ps_free(ps, BH(ptr3), ptr3);
     expect = keep_pages;
     ck_assert_msg(ps.total_pages() == expect,
-                  "Expected total_pages() = %d, got %d",
+                  "Expected total_pages() = %zu, got %zu",
                   expect, ps.total_pages());
 
     ck_assert(ps.count() == 7);
