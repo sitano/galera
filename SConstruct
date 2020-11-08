@@ -99,16 +99,7 @@ link_arch    = ''
 build_dir    = ''
 
 # Version script file
-galera_script = File('#/galera-sym.map').abspath
-with open(galera_script, 'w') as f:
-    f.write('''{
-    global: wsrep_loader;
-            wsrep_interface_version;
-            wsrep_init_thread_service_v1;
-    local:  *;
-};
-''')
-
+galera_script = File('#/galera/src/galera-sym.map').abspath
 
 #
 # Read commandline options
