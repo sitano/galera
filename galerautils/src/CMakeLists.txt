@@ -62,6 +62,7 @@ add_library(galerautilsxx
   gu_asio.cpp
   gu_debug_sync.cpp
   gu_thread.cpp
+  gu_thread_keys.cpp
   gu_uuid.cpp
   )
 
