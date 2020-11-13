@@ -496,6 +496,7 @@ gt_group::sst_start (int const joiner_idx,const char* donor_name)
         char* const req_buf = (char*)gcache->malloc(req_len, ptx);
         ck_assert(NULL != req_buf);
         ck_assert(NULL != ptx);
+        ::memset(ptx, 0, req_len);
         sprintf (static_cast<char*>(ptx), "%s", donor_name);
         gcache->drop_plaintext(req_buf);
 
