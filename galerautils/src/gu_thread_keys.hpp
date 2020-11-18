@@ -57,6 +57,7 @@ namespace gu
         GU_MUTEX_KEY_GCS_CORE_CAUSED,
         GU_MUTEX_KEY_SAVED_STATE,
         GU_MUTEX_KEY_GCACHE,
+        GU_MUTEX_KEY_GCS_MEMBERSHIP,
         GU_MUTEX_KEY_MAX /* This must always be the last */
     };
 

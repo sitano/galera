@@ -311,14 +311,15 @@ gt_group::perform_state_exchange()
                 gcs_group_handle_state_msg (nodes[j]->group(), &state_msg);
 
             if (nodes_num - 1 == i) { // a message from the last node
+                assert(ret == GCS_GROUP_PRIMARY);
                 ck_assert_msg(ret == GCS_GROUP_PRIMARY,
                               "Handling state msg failed: sender %d, "
-                              "receiver %d", i, j);
+                              "receiver %d, ret: %d", i, j, ret);
             }
             else {
                 ck_assert_msg(ret == GCS_GROUP_WAIT_STATE_MSG,
                               "Handling state msg failed: sender %d, "
-                              "receiver %d", i, j);
+                              "receiver %d, ret: %d", i, j, ret);
             }
         }
 

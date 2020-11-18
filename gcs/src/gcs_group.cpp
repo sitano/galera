@@ -12,6 +12,10 @@
 #include <gu_logger.hpp>
 #include <gu_macros.hpp>
 #include <gu_unordered.hpp>
+#include <gu_lock.hpp>
+#include <gu_uuid.hpp>
+
+#include <wsrep_membership_service.h>
 
 #include <errno.h>
 
@@ -157,10 +161,10 @@ static
 void
 group_nodes_free (gcs_group_t* group)
 {
-    int i;
+    assert(group->memb_mtx_.locked());
 
     /* cleanup after disappeared members */
-    for (i = 0; i < group->num; i++) {
+    for (int i = 0; i < group->num; i++) {
         gcs_node_free (&group->nodes[i]);
     }
 
@@ -169,6 +173,7 @@ group_nodes_free (gcs_group_t* group)
     group->nodes  = NULL;
     group->num    = 0;
     group->my_idx = -1;
+    group->memb_epoch_ = GCS_SEQNO_ILL;
 }
 
 void
@@ -176,17 +181,18 @@ gcs_group_free (gcs_group_t* group)
 {
     if (group->my_name)    free ((char*)group->my_name);
     if (group->my_address) free ((char*)group->my_address);
-    group_nodes_free (group);
     delete group->vote_history;
+
+    gu::Lock lock(group->memb_mtx_);
+    group_nodes_free (group);
 }
 
 /* Reset nodes array without breaking the statistics */
 static inline void
 group_nodes_reset (gcs_group_t* group)
 {
-    int i;
-    /* reset recv_acts at the nodes */
-    for (i = 0; i < group->num; i++) {
+    /* reset recv_acts at the nodes (no need to protect with memb_mtx_) */
+    for (int i = 0; i < group->num; i++) {
         if (i != group->my_idx) {
             gcs_node_reset (&group->nodes[i]);
         }
@@ -291,6 +297,10 @@ group_redo_last_applied (gcs_group_t* group)
 static void
 group_go_non_primary (gcs_group_t* group)
 {
+    assert(group->memb_mtx_.locked());
+
+    group->memb_epoch_ = group->act_id_;
+
     if (group->my_idx >= 0) {
         assert(group->num > 0);
         assert(group->nodes);
@@ -369,6 +379,8 @@ group_check_donor (gcs_group_t* group)
 static void
 group_post_state_exchange (gcs_group_t* group)
 {
+    assert(group->memb_mtx_.locked());
+
     const gcs_state_msg_t* states[group->num];
     gcs_state_quorum_t* quorum = &group->quorum;
     bool new_exchange = gu_uuid_compare (&group->state_uuid, &GU_UUID_NIL);
@@ -613,6 +625,7 @@ gcs_group_handle_comp_msg (gcs_group_t* group, const gcs_comp_msg_t* comp)
         }
     }
     else {
+        gu::Lock lock(group->memb_mtx_);
         group_go_non_primary (group);
     }
 
@@ -633,17 +646,23 @@ gcs_group_handle_comp_msg (gcs_group_t* group, const gcs_comp_msg_t* comp)
         new_memb |= (old_idx == group->num);
     }
 
-    /* free old nodes array */
-    group_nodes_free (group);
+    {
+        gu::Lock lock(group->memb_mtx_);
 
-    group->my_idx = new_my_idx;
-    group->num    = new_nodes_num;
-    group->nodes  = new_nodes;
+        /* free old nodes array */
+        group_nodes_free (group);
 
-    assert(group->num > 0 || group->my_idx < 0);
-    assert(group->my_idx >= 0 || group->num == 0);
+        group->my_idx = new_my_idx;
+        group->num    = new_nodes_num;
+        group->nodes  = new_nodes;
+        group->memb_epoch_ = group->act_id_;
 
-    if (group->my_idx >= 0) group->nodes[group->my_idx].bootstrap = my_bootstrap;
+        assert(group->num > 0 || group->my_idx < 0);
+        assert(group->my_idx >= 0 || group->num == 0);
+
+        if (group->my_idx >= 0)
+            group->nodes[group->my_idx].bootstrap = my_bootstrap;
+    }
 
     if (gcs_comp_msg_primary(comp) || bootstrap) {
         /* TODO: for now pretend that we always have new nodes and perform
@@ -718,8 +737,12 @@ gcs_group_handle_state_msg (gcs_group_t* group, const gcs_recv_msg_t* msg)
                          msg->sender_idx, gcs_state_msg_name(state));
                 gu_debug("%s", state_str);
 
-                gcs_node_record_state (&group->nodes[msg->sender_idx], state);
-                group_post_state_exchange (group);
+                {
+                    gu::Lock lock(group->memb_mtx_);
+                    group->memb_epoch_ = group->act_id_;
+                    gcs_node_record_state(&group->nodes[msg->sender_idx], state);
+                    group_post_state_exchange (group);
+                }
             }
             else {
                 gu_debug ("STATE EXCHANGE: stray state msg: " GU_UUID_FORMAT
@@ -807,7 +830,11 @@ gcs_group_handle_last_msg (gcs_group_t* group, const gcs_recv_msg_t* msg)
     // between threads.
     // assert (seqno >= group->last_applied);
 
-    gcs_node_set_last_applied (&group->nodes[msg->sender_idx], gtid.seqno());
+    {
+        gu::Lock lock(group->memb_mtx_);
+        group->memb_epoch_ = group->act_id_;
+        gcs_node_set_last_applied (&group->nodes[msg->sender_idx], gtid.seqno());
+    }
     assert(group->nodes[msg->sender_idx].last_applied >= 0);
 
     if (msg->sender_idx == group->last_node   &&
@@ -1011,7 +1038,11 @@ gcs_group_handle_vote_msg (gcs_group_t* group, const gcs_recv_msg_t* msg)
                  << gtid << ',' << gu::PrintBase<>(code) << ": "
                  << (code ? (data ? data : "(null)") : "Success");
 
-        gcs_node_set_vote (&sender, gtid.seqno(), code);
+        {
+            gu::Lock lock(group->memb_mtx_);
+            group->memb_epoch_ = group->act_id_;
+            gcs_node_set_vote (&sender, gtid.seqno(), code);
+        }
 
         if (group_recount_votes(*group))
         {
@@ -1093,7 +1124,11 @@ gcs_group_handle_join_msg  (gcs_group_t* group, const gcs_recv_msg_t* msg)
     if (gu_unlikely(group_unserialize_code_msg(group, msg, gtid,code))) return 0;
 
     if (GCS_NODE_STATE_DONOR  == sender->status ||
-        GCS_NODE_STATE_JOINER == sender->status) {
+        GCS_NODE_STATE_JOINER == sender->status)
+    {
+        gu::Lock lock(group->memb_mtx_);
+        group->memb_epoch_ = group->act_id_;
+
         int j;
         gcs_node_t* peer      = NULL;
         const char* peer_id   = NULL;
@@ -1233,7 +1268,10 @@ gcs_group_handle_sync_msg  (gcs_group_t* group, const gcs_recv_msg_t* msg)
     if (GCS_NODE_STATE_JOINED == sender->status ||
         /* #454 - at this layer we jump directly from DONOR to SYNCED */
         (0 == group->last_applied_proto_ver &&
-         GCS_NODE_STATE_DONOR == sender->status)) {
+         GCS_NODE_STATE_DONOR == sender->status))
+    {
+        gu::Lock lock(group->memb_mtx_);
+        group->memb_epoch_ = group->act_id_;
 
         sender->status = GCS_NODE_STATE_SYNCED;
         sender->count_last_applied = group_count_arbitrator(*group, *sender);
@@ -1692,7 +1730,11 @@ group_select_donor (gcs_group_t* group,
                                          donor_string, donor_len, ist_gtid);
     }
 
-    if (donor_idx >= 0) {
+    if (donor_idx >= 0)
+    {
+        gu::Lock lock(group->memb_mtx_);
+        group->memb_epoch_ = group->act_id_;
+
         assert(donor_idx != joiner_idx || desync);
 
         gcs_node_t* const joiner = &group->nodes[joiner_idx];
@@ -2082,3 +2124,90 @@ gcs_group_get_status (const gcs_group_t* group, gu::Status& status)
     status.insert("desync_count", gu::to_string(desync_count));
 }
 
+void
+gcs_group_get_membership(const gcs_group_t&        group,
+                         wsrep_allocator_cb const  alloc,
+                         struct wsrep_membership** memb)
+{
+    if (!alloc)
+    {
+        gu_throw_error(EINVAL) << "No allocator for membership return value";
+    }
+
+    gu::Lock lock(group.memb_mtx_);
+
+    size_t const memb_size
+        (sizeof(struct wsrep_membership) +
+         (group.num - 1)*sizeof(struct wsrep_member_info_ext));
+
+    *memb = static_cast<struct wsrep_membership*>(alloc(memb_size));
+
+    if (!*memb)
+    {
+        gu_throw_error(ENOMEM) << "Could not allocate " << memb_size
+                               << " bytes for membership struct.";
+    }
+
+    ::memset(*memb, 0, memb_size);
+
+    struct wsrep_membership& m(**memb);
+
+    m.group_uuid = group.group_uuid;
+    m.updated = group.memb_epoch_;
+
+    switch (group.state)
+    {
+    case GCS_GROUP_NON_PRIMARY:
+        m.state = WSREP_VIEW_NON_PRIMARY;
+        break;
+    case GCS_GROUP_WAIT_STATE_UUID:
+    case GCS_GROUP_WAIT_STATE_MSG:
+    case GCS_GROUP_PRIMARY:
+    case GCS_GROUP_INCONSISTENT:
+        m.state = WSREP_VIEW_PRIMARY;
+        break;
+    case GCS_GROUP_STATE_MAX:
+        m.state = WSREP_VIEW_DISCONNECTED;
+    }
+
+    m.num = group.num;
+
+    for (size_t i(0); i < m.num; ++i)
+    {
+        struct wsrep_member_info_ext& mn(m.members[i]);
+        const struct gcs_node& gn(group.nodes[i]);
+
+        gu_uuid_t uuid;
+        gu_uuid_scan(gn.id, sizeof(gn.id), &uuid);
+        mn.base.id = uuid;
+
+        ::snprintf(mn.base.name, sizeof(mn.base.name) - 1,//leave last byte for 0
+                   "%s", group.nodes[i].name);
+        ::snprintf(mn.base.incoming, sizeof(mn.base.incoming) - 1,
+                   "%s", group.nodes[i].inc_addr);
+
+        mn.last_committed = group.nodes[i].last_applied;
+
+        switch(group.nodes[i].status)
+        {
+        case GCS_NODE_STATE_NON_PRIM:
+        case GCS_NODE_STATE_PRIM:
+            mn.status = WSREP_MEMBER_UNDEFINED;
+            break;
+        case GCS_NODE_STATE_JOINER:
+            mn.status = WSREP_MEMBER_JOINER;
+            break;
+        case GCS_NODE_STATE_DONOR:
+            mn.status = WSREP_MEMBER_DONOR;
+            break;
+        case GCS_NODE_STATE_JOINED:
+            mn.status = WSREP_MEMBER_JOINED;
+            break;
+        case GCS_NODE_STATE_SYNCED:
+            mn.status = WSREP_MEMBER_SYNCED;
+            break;
+        case GCS_NODE_STATE_MAX:
+            mn.status = WSREP_MEMBER_ERROR;
+        }
+    }
+}

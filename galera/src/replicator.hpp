@@ -149,6 +149,10 @@ namespace galera
                                    wsrep_seqno_t seqno_g) = 0;
         virtual bool corrupt() const = 0;
 
+        virtual wsrep_status_t get_membership(wsrep_allocator_cb        alloc,
+                                              struct wsrep_membership** memb)
+            const = 0;
+
         static void register_params(gu::Config&);
 
     };

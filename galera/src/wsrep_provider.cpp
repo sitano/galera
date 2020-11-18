@@ -6,6 +6,7 @@
 #include "gu_serialize.hpp"
 #include "gu_thread_keys.hpp"
 #include "gu_asio.hpp" // gu::init_tls_service_v1()
+#include "wsrep_membership_service.h"
 
 #if defined(GALERA_MULTIMASTER)
 #include "replicator_smm.hpp"
@@ -1683,4 +1684,37 @@ int wsrep_init_tls_service_v1(wsrep_tls_service_v1_t *tls_service)
 extern "C" void wsrep_deinit_tls_service_v1()
 {
     gu::deinit_tls_service_v1();
+}
+
+static wsrep_status_t
+get_membership(wsrep_t* const            gh,
+               wsrep_allocator_cb const  alloc,
+               struct wsrep_membership** memb)
+{
+    assert(gh != 0);
+    assert(gh->ctx != 0);
+
+    REPL_CLASS * repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    try
+    {
+        return repl->get_membership(alloc, memb);
+    }
+    catch (std::exception& e)
+    {
+        log_error << e.what();
+        return WSREP_NODE_FAIL;
+    }
+}
+
+extern "C"
+wsrep_status_t wsrep_init_membership_service_v1(
+    struct wsrep_membership_service_v1 *membership_service)
+{
+    membership_service->get_membership = get_membership;
+    return WSREP_OK;
+}
+
+extern "C" void wsrep_deinit_membership_service_v1()
+{
 }

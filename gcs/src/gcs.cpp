@@ -2358,6 +2358,13 @@ void gcs_get_status(gcs_conn_t* conn, gu::Status& status)
     }
 }
 
+void gcs_get_membership(const gcs_conn_t* const   conn,
+                        wsrep_allocator_cb const  alloc,
+                        struct wsrep_membership** memb)
+{
+    gcs_core_get_membership(conn->core, alloc, memb);
+}
+
 static long
 _set_fc_limit (gcs_conn_t* conn, const char* value)
 {

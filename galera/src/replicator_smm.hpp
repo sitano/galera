@@ -355,6 +355,9 @@ namespace galera
 
         bool corrupt() const { return st_.corrupt(); }
 
+        wsrep_status_t get_membership(wsrep_allocator_cb        alloc,
+                                      struct wsrep_membership** memb) const;
+
         struct InitConfig
         {
             InitConfig(gu::Config&, const char* node_addr,const char* base_dir);

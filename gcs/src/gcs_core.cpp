@@ -1593,6 +1593,13 @@ void gcs_core_get_status(gcs_core_t* core, gu::Status& status)
     gu_mutex_unlock(&core->send_lock);
 }
 
+void gcs_core_get_membership(const gcs_core_t* const   core,
+                             wsrep_allocator_cb const  alloc,
+                             struct wsrep_membership** memb)
+{
+    gcs_group_get_membership(core->group, alloc, memb);
+}
+
 #ifdef GCS_CORE_TESTING
 
 gcs_backend_t*

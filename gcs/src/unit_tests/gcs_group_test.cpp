@@ -497,7 +497,7 @@ START_TEST(test_gcs_group_find_donor)
     const char* s_group_uuid = "0d0d0d0d-0d0d-0d0d-0d0d-0d0d0d0d0d0d";
     gu_uuid_scan(s_group_uuid, strlen(s_group_uuid), &group.group_uuid);
 
-    // five nodes
+    // seven nodes
     // idx name segment  seqno
     // 0th home0 0        90
     // 1th home1 0        95
@@ -508,7 +508,9 @@ START_TEST(test_gcs_group_find_donor)
     // 6th home6 1        105
 
     const int number = 7;
+    group.memb_mtx_.lock();
     group_nodes_free(&group);
+    group.memb_mtx_.unlock();
     group.nodes = (gcs_node_t*)malloc(sizeof(gcs_node_t) * number);
     group.num = number;
     const gcs_seqno_t seqnos[] = {90, 95, 105, 100, 90, 95, 105};

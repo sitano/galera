@@ -104,6 +104,8 @@ public:
             std::make_pair("saved_state", (wsrep_mutex_key_t*)(0)));
         mutex_keys_vec.push_back(
             std::make_pair("gcache", (wsrep_mutex_key_t*)(0)));
+        mutex_keys_vec.push_back(
+            std::make_pair("gcs_membership", (wsrep_mutex_key_t*)(0)));
         assert(mutex_keys_vec.size() == gu::GU_MUTEX_KEY_MAX);
     }
     const char* name;

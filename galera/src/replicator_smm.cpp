@@ -3555,3 +3555,20 @@ galera::ReplicatorSMM::abort()
     gcs_.close();
     gu_abort();
 }
+
+wsrep_status_t
+galera::ReplicatorSMM::get_membership(wsrep_allocator_cb const  alloc,
+                                      struct wsrep_membership** memb) const
+{
+    gu::Lock lock(closing_mutex_);
+
+    if (state_() > S_CLOSED)
+    {
+        gcs_.get_membership(alloc, memb);
+        return WSREP_OK;
+    }
+    else
+    {
+        gu_throw_error(EBADFD) << "Replicator connection closed";
+    }
+}

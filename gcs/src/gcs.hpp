@@ -11,6 +11,8 @@
 #ifndef _gcs_h_
 #define _gcs_h_
 
+#include "wsrep_membership_service.h"
+
 #include "gcs_gcache.hpp"
 
 #include <gu_config.h>
@@ -502,6 +504,9 @@ extern void gcs_get_stats (gcs_conn_t *conn, struct gcs_stats* stats);
 extern void gcs_flush_stats(gcs_conn_t *conn);
 
 void gcs_get_status(gcs_conn_t* conn, gu::Status& status);
+void gcs_get_membership(const gcs_conn_t* conn,
+                        wsrep_allocator_cb alloc,
+                        struct wsrep_membership** memb);
 
 /*! A node with this name will be treated as a stateless arbitrator */
 #define GCS_ARBITRATOR_NAME "garb"
