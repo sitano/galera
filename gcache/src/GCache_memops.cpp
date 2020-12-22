@@ -29,12 +29,18 @@ namespace gcache
     {
         assert(mtx.locked() && mtx.owned());
 
+        bool const params_debug(params.debug());
+
 #ifndef NDEBUG
-        if (params.debug()) cond.debug_begin();
+        if (params_debug) cond.debug_begin();
 #endif
         while (!seqno2ptr.empty() && cond.check())
         {
-            if (seqno2ptr.index_begin() >= seqno_locked) return false;
+            if (seqno2ptr.index_begin() >= seqno_locked)
+            {
+                if (params_debug) cond.debug_locked(seqno_locked);
+                return false;
+            }
 
             const void* const ptr(seqno2ptr.front());
             BufferHeader* const bh(get_BH(ptr));
@@ -49,7 +55,7 @@ namespace gcache
             else
             {
 #ifndef NDEBUG
-                if (params.debug()) cond.debug_fail();
+                if (params_debug) cond.debug_fail();
 #endif
                 assert(cond.check());
                 return false;
@@ -77,6 +83,11 @@ namespace gcache
         void debug_begin()
         {
             log_info << "GCache::discard_size(" << upto_ << ")";
+        }
+        void debug_locked(seqno_t const locked)
+        {
+            log_info << "GCache::discard_size(): "
+                     << locked << " is locked, bailing out.";
         }
         void debug_fail()
         {
@@ -109,6 +120,11 @@ namespace gcache
         {
             log_info << "GCache::discard_seqno(" << done_ + 1 << " - "
                      << upto_ << ")";
+        }
+        void debug_locked(seqno_t const locked)
+        {
+            log_info << "GCache::discard_seqno(" << upto_ << "): "
+                     << locked << " is locked, bailing out.";
         }
         void debug_fail()
         {
