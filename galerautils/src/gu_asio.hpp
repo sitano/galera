@@ -13,6 +13,8 @@
 #include "gu_config.hpp"
 #include "gu_uri.hpp"
 
+#include "wsrep_tls_service.h"
+
 #include <netinet/tcp.h> // tcp_info
 
 #include <array>
@@ -205,7 +207,20 @@ namespace gu
         AsioErrorCode(int value, const AsioErrorCategory& category)
             : value_(value)
             , category_(&category)
+            , tls_service_()
             , wsrep_category_()
+        { }
+
+        /**
+         * A constructor to generate error codes from wsrep stream
+         * service errors.
+         */
+        AsioErrorCode(int value, wsrep_tls_service_v1_t* tls_service,
+                      const void* wsrep_category)
+            : value_(value)
+            , category_()
+            , tls_service_(tls_service)
+            , wsrep_category_(wsrep_category)
         { }
 
         /**
@@ -242,6 +257,7 @@ namespace gu
     private:
         int value_;
         const AsioErrorCategory* category_;
+        wsrep_tls_service_v1_t* tls_service_;
         const void* wsrep_category_;
     };
 
@@ -691,11 +707,17 @@ namespace gu
          */
         std::shared_ptr<AsioAcceptor> make_acceptor(const gu::URI& uri);
 
+        /**
+         * Return pointer to TLS service.
+         */
+        wsrep_tls_service_v1_t* tls_service() const { return tls_service_; }
+
         class Impl;
         Impl& impl();
     private:
         std::unique_ptr<Impl> impl_;
         const gu::Config& conf_;
+        wsrep_tls_service_v1_t* tls_service_;
     };
 
     class AsioSteadyTimerHandler
@@ -725,6 +747,10 @@ namespace gu
         class Impl;
         std::unique_ptr<Impl> impl_;
     };
+
+    /* Init/deinit global TLS service hooks. */
+    int init_tls_service_v1(wsrep_tls_service_v1_t*);
+    void deinit_tls_service_v1();
 }
 
 #endif // GU_ASIO_HPP

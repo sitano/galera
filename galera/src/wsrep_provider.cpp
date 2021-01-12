@@ -5,6 +5,7 @@
 #include "key_data.hpp"
 #include "gu_serialize.hpp"
 #include "gu_thread_keys.hpp"
+#include "gu_asio.hpp" // gu::init_tls_service_v1()
 
 #if defined(GALERA_MULTIMASTER)
 #include "replicator_smm.hpp"
@@ -1665,4 +1666,21 @@ int wsrep_init_thread_service_v1(wsrep_thread_service_v1_t* ts)
 
 {
     return gu::init_thread_service_v1(ts);
+}
+
+extern "C"
+void wsrep_deinit_thread_service_v1()
+{
+    gu::deinit_thread_service_v1();
+}
+
+extern "C"
+int wsrep_init_tls_service_v1(wsrep_tls_service_v1_t *tls_service)
+{
+    return gu::init_tls_service_v1(tls_service);
+}
+
+extern "C" void wsrep_deinit_tls_service_v1()
+{
+    gu::deinit_tls_service_v1();
 }

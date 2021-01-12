@@ -261,11 +261,17 @@ const wsrep_cond_key_t* gu::get_cond_key(enum gu::CondKey key)
 // the service on while having instrumented mutex locked will
 // result in undefined behavior.
 static std::mutex thread_service_init_mutex;
+static size_t gu_thread_service_usage;
 
 int gu::init_thread_service_v1(wsrep_thread_service_v1_t* ts)
 {
     std::lock_guard<std::mutex> lock(thread_service_init_mutex);
-    if (gu_thread_service) return 0;
+    if (gu_thread_service)
+    {
+        ++gu_thread_service_usage;
+        return 0;
+    }
+
     try
     {
         gu_thread_service = ts;
@@ -275,6 +281,7 @@ int gu::init_thread_service_v1(wsrep_thread_service_v1_t* ts)
                       mutex_keys_vec, MutexRegisterOp());
         register_keys(cond_keys_vec_initializer,
                       cond_keys_vec, CondRegisterOp());
+        ++gu_thread_service_usage;
         return 0;
     }
     catch (const gu::Exception& e)
@@ -288,4 +295,12 @@ int gu::init_thread_service_v1(wsrep_thread_service_v1_t* ts)
         gu_thread_service = 0;
         return 1;
     }
+}
+
+void gu::deinit_thread_service_v1()
+{
+    std::lock_guard<std::mutex> lock(thread_service_init_mutex);
+    assert(gu_thread_service_usage > 0);
+    --gu_thread_service_usage;
+    if (gu_thread_service_usage == 0) gu_thread_service = 0;
 }

@@ -94,6 +94,7 @@ namespace gu
     const wsrep_cond_key_t* get_cond_key(enum CondKey key);
 
     int init_thread_service_v1(wsrep_thread_service_v1_t*);
+    void deinit_thread_service_v1();
 }
 
 #endif /* GU_THREAD_KEYS_HPP */
