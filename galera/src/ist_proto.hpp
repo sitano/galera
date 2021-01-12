@@ -23,12 +23,8 @@
 // support up to version 3 is removed as serialization/deserialization
 // depends on the size of the class.
 //
-#if defined(__GNUG__)
-# if (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) || (__GNUC__ > 4)
-#  pragma GCC diagnostic push
-# endif // (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) || (__GNUC__ > 4)
-# pragma GCC diagnostic ignored "-Weffc++"
-#endif
+
+#include "gu_disable_non_virtual_dtor.hpp"
 
 //
 // Sender                            Receiver
@@ -300,26 +296,23 @@ namespace galera
                 }
             }
 
-            template <class ST>
-            void send_handshake(ST& socket)
+            void send_handshake(gu::AsioSocket& socket)
             {
                 Handshake  hs(version_);
                 gu::Buffer buf(hs.serial_size());
                 size_t offset(hs.serialize(&buf[0], buf.size(), 0));
-                size_t n(asio::write(socket, asio::buffer(&buf[0],
-                                                          buf.size())));
+                size_t n(socket.write(gu::AsioConstBuffer(&buf[0], buf.size())));
                 if (n != offset)
                 {
                     gu_throw_error(EPROTO) << "error sending handshake";
                 }
             }
 
-            template <class ST>
-            void recv_handshake(ST& socket)
+            void recv_handshake(gu::AsioSocket& socket)
             {
                 Message    msg(version_);
                 gu::Buffer buf(msg.serial_size());
-                size_t n(asio::read(socket, asio::buffer(&buf[0], buf.size())));
+                size_t n(socket.read(gu::AsioMutableBuffer(&buf[0], buf.size())));
 
                 if (n != buf.size())
                 {
@@ -359,13 +352,12 @@ namespace galera
                 // TODO: Figure out protocol versions to use
             }
 
-            template <class ST>
-            void send_handshake_response(ST& socket)
+            void send_handshake_response(gu::AsioSocket& socket)
             {
                 HandshakeResponse hsr(version_);
                 gu::Buffer buf(hsr.serial_size());
                 size_t offset(hsr.serialize(&buf[0], buf.size(), 0));
-                size_t n(asio::write(socket, asio::buffer(&buf[0], buf.size())));
+                size_t n(socket.write(gu::AsioConstBuffer(&buf[0], buf.size())));
                 if (n != offset)
                 {
                     gu_throw_error(EPROTO)
@@ -373,12 +365,11 @@ namespace galera
                 }
             }
 
-            template <class ST>
-            void recv_handshake_response(ST& socket)
+            void recv_handshake_response(gu::AsioSocket& socket)
             {
                 Message    msg(version_);
                 gu::Buffer buf(msg.serial_size());
-                size_t n(asio::read(socket, asio::buffer(&buf[0], buf.size())));
+                size_t n(socket.read(gu::AsioMutableBuffer(&buf[0], buf.size())));
 
                 if (n != buf.size())
                 {
@@ -410,25 +401,23 @@ namespace galera
                 }
             }
 
-            template <class ST>
-            void send_ctrl(ST& socket, int8_t code)
+            void send_ctrl(gu::AsioSocket& socket, int8_t code)
             {
                 Ctrl       ctrl(version_, code);
                 gu::Buffer buf(ctrl.serial_size());
                 size_t offset(ctrl.serialize(&buf[0], buf.size(), 0));
-                size_t n(asio::write(socket, asio::buffer(&buf[0],buf.size())));
+                size_t n(socket.write(gu::AsioConstBuffer(&buf[0], buf.size())));
                 if (n != offset)
                 {
                     gu_throw_error(EPROTO) << "error sending ctrl message";
                 }
             }
 
-            template <class ST>
-            int8_t recv_ctrl(ST& socket)
+            int8_t recv_ctrl(gu::AsioSocket& socket)
             {
                 Message    msg(version_);
                 gu::Buffer buf(msg.serial_size());
-                size_t n(asio::read(socket, asio::buffer(&buf[0], buf.size())));
+                size_t n(socket.read(gu::AsioMutableBuffer(&buf[0], buf.size())));
 
                 if (n != buf.size())
                 {
@@ -451,16 +440,13 @@ namespace galera
                 return msg.ctrl();
             }
 
-
-            template <class ST>
-
-            void send_ordered(ST&                           socket,
+            void send_ordered(gu::AsioSocket&                           socket,
                               const gcache::GCache::Buffer& buffer,
                               bool const                    preload_flag)
             {
                 Message::Type type(ordered_type(buffer));
 
-                gu::array<asio::const_buffer, 3>::type cbs;
+                std::array<gu::AsioConstBuffer, 3> cbs;
 
                 ssize_t     payload_size; /* size of the 2nd cbs buffer */
                 size_t      sent;
@@ -484,8 +470,8 @@ namespace galera
                     {
                         payload_size = tmp.size;
 
-                        cbs[1] = asio::const_buffer(tmp.ptr, tmp.size);
-                        cbs[2] = asio::const_buffer(tmp.ptr, 0);
+                        cbs[1] = gu::AsioConstBuffer(tmp.ptr, tmp.size);
+                        cbs[2] = gu::AsioConstBuffer(tmp.ptr, 0);
 
                         if (gu_likely(Message::T_TRX == type)) // compatibility
                         {
@@ -503,8 +489,8 @@ namespace galera
                         assert (2 == out->size());
                         assert (payload_size == out[0].size + out[1].size);
 
-                        cbs[1] = asio::const_buffer(out[0].ptr, out[0].size);
-                        cbs[2] = asio::const_buffer(out[1].ptr, out[1].size);
+                        cbs[1] = gu::AsioConstBuffer(out[0].ptr, out[0].size);
+                        cbs[2] = gu::AsioConstBuffer(out[1].ptr, out[1].size);
 
                         seqno_d = buffer.seqno_g() - ws.pa_range();
 
@@ -543,15 +529,15 @@ namespace galera
                                             &buf[0], buf.size(), offset);
                 }
 
-                cbs[0] = asio::const_buffer(&buf[0], buf.size());
+                cbs[0] = gu::AsioConstBuffer(&buf[0], buf.size());
 
                 if (gu_likely(payload_size))
                 {
-                    sent = asio::write(socket, cbs);
+                    sent = gu::write(socket, cbs);
                 }
                 else
                 {
-                    sent = asio::write(socket, asio::buffer(cbs[0]));
+                    sent = socket.write(cbs[0]);
                 }
 
                 log_debug << "sent " << sent << " bytes with seqno "
@@ -561,23 +547,20 @@ namespace galera
                     gcache_.drop_plaintext(buffer.ptr());
             }
 
-            template <class ST>
-            void skip_bytes(ST& socket, size_t bytes)
+            void skip_bytes(gu::AsioSocket& socket, size_t bytes)
             {
                 gu::Buffer buf(4092);
                 while (bytes > 0)
                 {
-                    bytes -= asio::read(
-                        socket,
-                        asio::buffer(&buf[0], std::min(buf.size(), bytes)));
+                    bytes -= socket.read(
+                        gu::AsioMutableBuffer(
+                            &buf[0], std::min(buf.size(), bytes)));
                 }
                 assert(bytes == 0);
             }
 
-
-            template <class ST>
             void
-            recv_ordered(ST& socket,
+            recv_ordered(gu::AsioSocket& socket,
                          std::pair<gcs_action, bool>& ret)
             {
                 gcs_action& act(ret.first);
@@ -590,7 +573,7 @@ namespace galera
 
                 Message    msg(version_);
                 gu::Buffer buf(msg.serial_size());
-                size_t n(asio::read(socket, asio::buffer(&buf[0], buf.size())));
+                size_t n(socket.read(gu::AsioMutableBuffer(&buf[0], buf.size())));
 
                 if (n != buf.size())
                 {
@@ -619,7 +602,7 @@ namespace galera
 
                         buf.resize(sizeof(seqno_g) + sizeof(seqno_d));
 
-                        n = asio::read(socket, asio::buffer(&buf[0],buf.size()));
+                        n = socket.read(gu::AsioMutableBuffer(&buf[0],buf.size()));
                         if (n != buf.size())
                         {
                             assert(0);
@@ -700,7 +683,7 @@ namespace galera
                             void* ptx;
                             void* const ptr(gcache_.malloc(wsize, ptx));
                             ssize_t const r
-                                (asio::read(socket, asio::buffer(ptx, wsize)));
+                                (socket.read(gu::AsioMutableBuffer(ptx, wsize)));
                             /* Since IST events are normally processed right
                              * away, we want the plaintext to linger until the
                              * event is done with and free()'d, so not dropping
@@ -710,7 +693,9 @@ namespace galera
                             if (gu_unlikely(r != wsize))
                             {
                                 gu_throw_error(EPROTO)
-                                    << "error reading write set data";
+                                    << "error reading write set data, "
+                                    << "expected " << wsize
+                                    << " got " << r;
                             }
 
                             wbuf = ptr;
@@ -810,11 +795,6 @@ namespace galera
     }
 }
 
-#if defined(__GNUG__)
-# if (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) || (__GNUC__ > 4)
-#  pragma GCC diagnostic pop
-# endif // (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) || (__GNUC__ > 4)
-#endif
-
+#include "gu_enable_non_virtual_dtor.hpp"
 
 #endif // GALERA_IST_PROTO_HPP
