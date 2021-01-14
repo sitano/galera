@@ -207,12 +207,14 @@ gu::AsioErrorCategory gu_asio_ssl_category(asio::error::get_ssl_category());
 gu::AsioErrorCode::AsioErrorCode()
     : value_()
     , category_(&gu_asio_system_category)
+    , tls_service_()
     , wsrep_category_()
 { }
 
 gu::AsioErrorCode::AsioErrorCode(int err)
     : value_(err)
     , category_(&gu_asio_system_category)
+    , tls_service_()
     , wsrep_category_()
 { }
 
