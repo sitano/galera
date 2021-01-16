@@ -47,6 +47,7 @@ tests/conf/nodes.conf
 tests/conf/common_my.cnf
 tests/conf/my[0-9]*.cnf
 wsrep/tests/wsrep_test
+wsrep/tests/wsrep_test.passed
 docs/build
 *.gcno
 *.gcda
