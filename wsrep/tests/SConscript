@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020 Codership Oy <info@codership.com>
+# Copyright (C) 2021 Codership Oy <info@codership.com>
 #
 
 #
@@ -10,7 +10,7 @@
 
 Import('check_env', 'GALERA_VER', 'GALERA_REV')
 
-# make sure API verion is present once in GALERA_VER string
+# make sure API version is present once in GALERA_VER string
 API = '26.'
 GALERA_VER = API + GALERA_VER.replace(API, '')
 
@@ -21,6 +21,7 @@ env.Replace(CPPFLAGS = '-D_XOPEN_SOURCE=600') # for strdup()
 env.Append(CPPFLAGS = ' -DWSREP_PROVIDER=\\"' + File('#/libgalera_smm.so').abspath + '\\"')
 env.Append(CPPFLAGS = ' -DGALERA_VERSION=\\"' + GALERA_VER + '\\"')
 env.Append(CPPFLAGS = ' -DGALERA_GIT_REVISION=\\"' + GALERA_REV + '\\"')
+env.Append(CPPPATH = ['#/galerautils/src'])
 env.Replace(LIBS = 'dl')
 
 wsrep_test_sources = Split('''
@@ -29,11 +30,11 @@ wsrep_test_sources = Split('''
                            ../src/wsrep_dummy.c
                            ''')
 
-wsrep_test = env.Program(target='wsrep_test', source=wsrep_test_sources)
+wsrep_test = env.Program(target = 'wsrep_test', source = wsrep_test_sources)
+Depends(wsrep_test, '#/libgalera_smm.so')
 
 stamp = "wsrep_test.passed"
 env.Test(stamp, wsrep_test)
 env.Alias("test", stamp)
 
-#Clean(wsrep_test, ['#/wsrep_tests.log'])
 Clean(wsrep_test, [stamp])
