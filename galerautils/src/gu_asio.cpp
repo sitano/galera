@@ -220,7 +220,12 @@ gu::AsioErrorCode::AsioErrorCode(int err)
 
 std::string gu::AsioErrorCode::message() const
 {
-    if (category_)
+    if (wsrep_category_ && gu_tls_service)
+    {
+        return gu_tls_service->error_message_get(
+            gu_tls_service->context, value_, wsrep_category_);
+    }
+    else if (category_)
     {
         std::string ret(
             asio::error_code(value_, category_->native()).message());
