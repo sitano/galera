@@ -205,22 +205,24 @@ namespace gu
         AsioErrorCode(int value, const AsioErrorCategory& category)
             : value_(value)
             , category_(&category)
-            , tls_service_()
+            , error_extra_()
             , wsrep_category_()
         { }
 
-        /**
-         * A constructor to generate error codes from wsrep stream
-         * service errors.
-         */
-        AsioErrorCode(int value, wsrep_tls_service_v1_t* tls_service,
-                      const void* wsrep_category)
+        AsioErrorCode(int value, const AsioErrorCategory& category,
+                      int error_extra)
             : value_(value)
-            , category_()
-            , tls_service_(tls_service)
-            , wsrep_category_(wsrep_category)
+            , category_(&category)
+            , error_extra_(error_extra)
+            , wsrep_category_()
         { }
 
+        AsioErrorCode(int value, const void* wsrep_category)
+            : value_(value)
+            , category_()
+            , error_extra_()
+            , wsrep_category_()
+        { }
         /**
          * Return error number.
          */
@@ -243,11 +245,6 @@ namespace gu
         bool is_eof() const;
 
         /**
-         * Return true if the error belongs to wsrep category.
-         */
-        bool is_wsrep() const;
-
-        /**
          * Return true if the error is system error.
          */
         bool is_system() const;
@@ -255,7 +252,8 @@ namespace gu
     private:
         int value_;
         const AsioErrorCategory* category_;
-        wsrep_tls_service_v1_t* tls_service_;
+        // Extra category specific error information
+        int error_extra_;
         const void* wsrep_category_;
     };
 
