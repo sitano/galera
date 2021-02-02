@@ -43,12 +43,20 @@ fi
 # See %_rpmfilename (http://rpm.org/api/4.4.2.2/config_macros.html)
 #[ -n "$DISTRO_VERSION" ] && RELEASE=$RELEASE.$DISTRO_VERSION
 
-# %dist does not return a value for centos5
+DIST_TAG=
+# %dist does not return a value for centos5 and sles12
 # https://bugs.centos.org/view.php?id=3239
 if [ ${DISTRO_VERSION} = "rhel5" ]
 then
   DIST_TAG=".el5"
 else
+fi
+if [ ${DISTRO_VERSION} = "sles12" ]
+then
+  DIST_TAG=".sles12"
+fi
+if [ -z "$DIST_TAG" ]
+then
   DIST_TAG=$(rpm --eval %{dist})
 fi
 
