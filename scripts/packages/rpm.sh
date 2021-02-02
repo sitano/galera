@@ -49,12 +49,13 @@ DIST_TAG=
 if [ ${DISTRO_VERSION} = "rhel5" ]
 then
   DIST_TAG=".el5"
-else
 fi
+
 if [ ${DISTRO_VERSION} = "sles12" ]
 then
   DIST_TAG=".sles12"
 fi
+
 if [ -z "$DIST_TAG" ]
 then
   DIST_TAG=$(rpm --eval %{dist})
