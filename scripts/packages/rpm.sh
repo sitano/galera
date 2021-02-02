@@ -56,6 +56,11 @@ then
   DIST_TAG=".sles12"
 fi
 
+if [ ${DISTRO_VERSION} = "sles42" ]
+then
+  DIST_TAG=".sles42"
+fi
+
 if [ -z "$DIST_TAG" ]
 then
   DIST_TAG=$(rpm --eval %{dist})
