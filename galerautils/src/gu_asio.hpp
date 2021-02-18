@@ -213,6 +213,7 @@ namespace gu
             , category_(&category)
             , error_extra_()
             , wsrep_category_()
+            , tls_stream_()
         { }
 
         AsioErrorCode(int value, const AsioErrorCategory& category,
@@ -221,13 +222,16 @@ namespace gu
             , category_(&category)
             , error_extra_(error_extra)
             , wsrep_category_()
+            , tls_stream_()
         { }
 
-        AsioErrorCode(int value, const void* wsrep_category)
+        AsioErrorCode(int value, const void* wsrep_category,
+                      const wsrep_tls_stream_t* tls_stream)
             : value_(value)
             , category_()
             , error_extra_()
-            , wsrep_category_()
+            , wsrep_category_(wsrep_category)
+            , tls_stream_(tls_stream)
         { }
         /**
          * Return error number.
@@ -261,6 +265,7 @@ namespace gu
         // Extra category specific error information
         int error_extra_;
         const void* wsrep_category_;
+        const wsrep_tls_stream_t* tls_stream_;
     };
 
     std::ostream& operator<<(std::ostream&, const AsioErrorCode&);

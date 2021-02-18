@@ -224,7 +224,7 @@ std::string gu::AsioErrorCode::message() const
     if (wsrep_category_ && gu_tls_service)
     {
         return gu_tls_service->error_message_get(
-            gu_tls_service->context, value_, wsrep_category_);
+            gu_tls_service->context, tls_stream_, value_, wsrep_category_);
     }
     else if (category_)
     {

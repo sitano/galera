@@ -369,7 +369,8 @@ public:
 
     virtual gu::AsioErrorCode last_error() const GALERA_OVERRIDE
     {
-        return gu::AsioErrorCode(last_error_value_, last_error_category_);
+        return gu::AsioErrorCode(last_error_value_, last_error_category_,
+                                 &stream_);
     }
 private:
 
