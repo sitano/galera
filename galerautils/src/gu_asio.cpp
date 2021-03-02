@@ -210,6 +210,7 @@ gu::AsioErrorCode::AsioErrorCode()
     , category_(&gu_asio_system_category)
     , error_extra_()
     , wsrep_category_()
+    , tls_stream_()
 { }
 
 gu::AsioErrorCode::AsioErrorCode(int err)
@@ -217,6 +218,7 @@ gu::AsioErrorCode::AsioErrorCode(int err)
     , category_(&gu_asio_system_category)
     , error_extra_()
     , wsrep_category_()
+    , tls_stream_()
 { }
 
 std::string gu::AsioErrorCode::message() const
