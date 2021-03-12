@@ -524,6 +524,7 @@ void gu::ssl_register_params(gu::Config& conf)
     conf.add(gu::conf::ssl_ca);
     conf.add(gu::conf::ssl_password_file);
     conf.add(gu::conf::ssl_reload);
+    conf.add(gu::conf::socket_dynamic);
 }
 
 void gu::ssl_param_set(const std::string& key, const std::string& val, 
@@ -644,10 +645,15 @@ gu::AsioIoService::AsioIoService(const gu::Config& conf)
     , conf_(conf)
     , tls_service_(gu_tls_service)
     , signal_connection_()
+    , dynamic_socket_(false)
 {
     signal_connection_ = gu::Signals::Instance().connect(
         gu::Signals::slot_type(&gu::AsioIoService::handle_signal, 
                                this, _1));
+    if (conf.has(gu::conf::socket_dynamic))
+    {
+        dynamic_socket_ = conf.get<bool>(gu::conf::socket_dynamic, false);
+    }
 #ifdef GALERA_HAVE_SSL
     load_crypto_context();
 #endif // GALERA_HAVE_SSL
@@ -668,6 +674,11 @@ void gu::AsioIoService::handle_signal(const gu::Signals::SignalType& type)
     default:
         break;
     }
+}
+
+bool gu::AsioIoService::ssl_enabled() const
+{
+    return impl_->ssl_context_.get();
 }
 
 void gu::AsioIoService::load_crypto_context()
