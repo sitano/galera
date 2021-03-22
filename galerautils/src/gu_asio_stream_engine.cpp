@@ -334,6 +334,11 @@ public:
     AsioWsrepStreamEngine(const AsioWsrepStreamEngine&) = delete;
     AsioWsrepStreamEngine& operator=(const AsioWsrepStreamEngine&) = delete;
 
+    virtual std::string scheme() const GALERA_OVERRIDE
+    {
+        return gu::scheme::ssl;
+    }
+
     virtual enum op_status client_handshake() GALERA_OVERRIDE
     {
         clear_error();
