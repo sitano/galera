@@ -306,123 +306,6 @@ private:
     const gu::AsioErrorCategory* last_error_category_;
 };
 
-#endif // GALERA_HAVE_SSL
-
-class AsioWsrepStreamEngine : public gu::AsioStreamEngine
-{
-public:
-    AsioWsrepStreamEngine(wsrep_tls_service_v1_t* service, int fd)
-        : service_(service)
-        , stream_()
-        , last_error_value_()
-        , last_error_category_()
-    {
-        stream_.fd = fd;
-        stream_.opaque = 0;
-        int err;
-        if ((err = service_->stream_init(service_->context, &stream_)))
-        {
-            gu_throw_error(err) << "Failed to init wsrep TLS stream";
-        }
-    }
-
-    ~AsioWsrepStreamEngine()
-    {
-        service_->stream_deinit(service_->context, &stream_);
-    }
-
-    AsioWsrepStreamEngine(const AsioWsrepStreamEngine&) = delete;
-    AsioWsrepStreamEngine& operator=(const AsioWsrepStreamEngine&) = delete;
-
-    virtual std::string scheme() const GALERA_OVERRIDE
-    {
-        return gu::scheme::ssl;
-    }
-
-    virtual enum op_status client_handshake() GALERA_OVERRIDE
-    {
-        clear_error();
-        return map_status(
-            service_->stream_client_handshake(service_->context, &stream_));
-    }
-
-    virtual enum op_status server_handshake() GALERA_OVERRIDE
-    {
-        clear_error();
-        return map_status(
-            service_->stream_server_handshake(service_->context, &stream_));
-    }
-
-    virtual op_result read(void* buf, size_t max_count) GALERA_OVERRIDE
-    {
-        clear_error();
-        size_t bytes_transferred(0);
-        return op_result{
-            map_status(
-                service_->stream_read(service_->context,
-                                      &stream_,
-                                      buf, max_count, &bytes_transferred)),
-                bytes_transferred};
-    }
-
-    virtual op_result write(const void* buf, size_t count) GALERA_OVERRIDE
-    {
-        clear_error();
-        size_t bytes_transferred(0);
-        return op_result{
-            map_status(
-                service_->stream_write(service_->context,
-                                       &stream_,
-                                       buf, count, &bytes_transferred)),
-                bytes_transferred};
-    }
-
-    virtual void shutdown() GALERA_OVERRIDE
-    {
-        clear_error();
-        // @todo Handle return code from shutdown call.
-        service_->stream_shutdown(service_->context, &stream_);
-    }
-
-    virtual gu::AsioErrorCode last_error() const GALERA_OVERRIDE
-    {
-        return gu::AsioErrorCode(last_error_value_, last_error_category_,
-                                 &stream_);
-    }
-private:
-
-    enum op_status map_status(enum wsrep_tls_result status)
-    {
-        switch (status)
-        {
-        case wsrep_tls_result_success:
-            return success;
-        case wsrep_tls_result_want_read:
-            return want_read;
-        case wsrep_tls_result_want_write:
-            return want_write;
-        case wsrep_tls_result_eof:
-            return eof;
-        case wsrep_tls_result_error:
-            last_error_value_ = service_->stream_get_error_number(
-                service_->context,
-                &stream_);
-            last_error_category_ = service_->stream_get_error_category(
-                service_->context,
-                &stream_);
-            return error;
-        }
-        assert(0);
-        return error;
-    }
-
-    void clear_error() { last_error_value_ = 0; last_error_category_ = 0; }
-    wsrep_tls_service_v1_t* service_;
-    wsrep_tls_stream_t stream_;
-    int last_error_value_;
-    const void* last_error_category_;
-};
-
 /*
  * DynamicStreamEngine is used to choose either TCP or SSL for socket communication.
  * Following condition should be true: Ts(server timeout) > Tc(client timeout).  
@@ -721,6 +604,123 @@ private:
     gu::datetime::Date client_encrypted_message_sent_ts_;
 };
 
+#endif // GALERA_HAVE_SSL
+
+class AsioWsrepStreamEngine : public gu::AsioStreamEngine
+{
+public:
+    AsioWsrepStreamEngine(wsrep_tls_service_v1_t* service, int fd)
+        : service_(service)
+        , stream_()
+        , last_error_value_()
+        , last_error_category_()
+    {
+        stream_.fd = fd;
+        stream_.opaque = 0;
+        int err;
+        if ((err = service_->stream_init(service_->context, &stream_)))
+        {
+            gu_throw_error(err) << "Failed to init wsrep TLS stream";
+        }
+    }
+
+    ~AsioWsrepStreamEngine()
+    {
+        service_->stream_deinit(service_->context, &stream_);
+    }
+
+    AsioWsrepStreamEngine(const AsioWsrepStreamEngine&) = delete;
+    AsioWsrepStreamEngine& operator=(const AsioWsrepStreamEngine&) = delete;
+
+    virtual std::string scheme() const GALERA_OVERRIDE
+    {
+        return gu::scheme::ssl;
+    }
+
+    virtual enum op_status client_handshake() GALERA_OVERRIDE
+    {
+        clear_error();
+        return map_status(
+            service_->stream_client_handshake(service_->context, &stream_));
+    }
+
+    virtual enum op_status server_handshake() GALERA_OVERRIDE
+    {
+        clear_error();
+        return map_status(
+            service_->stream_server_handshake(service_->context, &stream_));
+    }
+
+    virtual op_result read(void* buf, size_t max_count) GALERA_OVERRIDE
+    {
+        clear_error();
+        size_t bytes_transferred(0);
+        return op_result{
+            map_status(
+                service_->stream_read(service_->context,
+                                      &stream_,
+                                      buf, max_count, &bytes_transferred)),
+                bytes_transferred};
+    }
+
+    virtual op_result write(const void* buf, size_t count) GALERA_OVERRIDE
+    {
+        clear_error();
+        size_t bytes_transferred(0);
+        return op_result{
+            map_status(
+                service_->stream_write(service_->context,
+                                       &stream_,
+                                       buf, count, &bytes_transferred)),
+                bytes_transferred};
+    }
+
+    virtual void shutdown() GALERA_OVERRIDE
+    {
+        clear_error();
+        // @todo Handle return code from shutdown call.
+        service_->stream_shutdown(service_->context, &stream_);
+    }
+
+    virtual gu::AsioErrorCode last_error() const GALERA_OVERRIDE
+    {
+        return gu::AsioErrorCode(last_error_value_, last_error_category_,
+                                 &stream_);
+    }
+private:
+
+    enum op_status map_status(enum wsrep_tls_result status)
+    {
+        switch (status)
+        {
+        case wsrep_tls_result_success:
+            return success;
+        case wsrep_tls_result_want_read:
+            return want_read;
+        case wsrep_tls_result_want_write:
+            return want_write;
+        case wsrep_tls_result_eof:
+            return eof;
+        case wsrep_tls_result_error:
+            last_error_value_ = service_->stream_get_error_number(
+                service_->context,
+                &stream_);
+            last_error_category_ = service_->stream_get_error_category(
+                service_->context,
+                &stream_);
+            return error;
+        }
+        assert(0);
+        return error;
+    }
+
+    void clear_error() { last_error_value_ = 0; last_error_category_ = 0; }
+    wsrep_tls_service_v1_t* service_;
+    wsrep_tls_stream_t stream_;
+    int last_error_value_;
+    const void* last_error_category_;
+};
+
 std::shared_ptr<gu::AsioStreamEngine> gu::AsioStreamEngine::make(
     AsioIoService& io_service, const std::string& scheme, int fd, bool non_blocking)
 {
@@ -734,11 +734,19 @@ std::shared_ptr<gu::AsioStreamEngine> gu::AsioStreamEngine::make(
 
     if (scheme == "tcp")
     {
+#ifdef GALERA_HAVE_SSL
         if (not io_service.dynamic_socket_enabled())
+#else // GALERA_HAVE_SSL
+        if (io_service.dynamic_socket_enabled())
+        {
+            GU_ASIO_DEBUG("Dynamic socket enabled without SSL compiled, using TCP engine")
+        }
+#endif
         {
             GU_ASIO_DEBUG("AsioStreamEngine::make use TCP engine");
             return std::make_shared<AsioTcpStreamEngine>(fd);
         }
+#ifdef GALERA_HAVE_SSL
         else
         {
             GU_ASIO_DEBUG("AsioStreamEngine::make use Dynamic engine")
@@ -746,6 +754,7 @@ std::shared_ptr<gu::AsioStreamEngine> gu::AsioStreamEngine::make(
                                                             non_blocking,
                                                             io_service.ssl_enabled());
         }
+#endif // GALERA_HAVE_SSL
     }
 #ifdef GALERA_HAVE_SSL
     else if (scheme == "ssl")
@@ -757,7 +766,7 @@ std::shared_ptr<gu::AsioStreamEngine> gu::AsioStreamEngine::make(
         }
         else
         {
-            GU_ASIO_DEBUG("AsioStreamEngine::make use Dynamic engine");
+           GU_ASIO_DEBUG("AsioStreamEngine::make use Dynamic engine");
            return std::make_shared<AsioDynamicStreamEngine>(io_service, fd,
                                                             non_blocking,
                                                             io_service.ssl_enabled());
