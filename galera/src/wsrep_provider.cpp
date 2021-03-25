@@ -1199,9 +1199,7 @@ wsrep_status_t galera_to_execute_start(wsrep_t*                const gh,
 
     wsrep_status_t retval;
 
-#ifdef NDEBUG
     try
-#endif // NDEBUG
     {
         TrxHandleLock lock(trx);
         for (size_t i(0); i < keys_num; ++i)
@@ -1247,7 +1245,6 @@ wsrep_status_t galera_to_execute_start(wsrep_t*                const gh,
             retval = repl->to_isolation_begin(trx, meta);
         }
     }
-#ifdef NDEBUG
     catch (gu::Exception& e)
     {
         log_error << e.what();
@@ -1267,7 +1264,6 @@ wsrep_status_t galera_to_execute_start(wsrep_t*                const gh,
         log_fatal << "non-standard exception";
         retval = WSREP_FATAL;
     }
-#endif // NDEBUG
 
     if (trx.ts() == NULL || trx.ts()->global_seqno() < 0)
     {
