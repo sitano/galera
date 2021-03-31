@@ -27,6 +27,7 @@
 #include "gu_asio_ip_address_impl.hpp"
 #include "gu_asio_stream_react.hpp"
 #include "gu_asio_utils.hpp"
+#include "gu_signals.hpp"
 
 #ifndef ASIO_HAS_BOOST_BIND
 #define ASIO_HAS_BOOST_BIND
@@ -205,20 +206,29 @@ gu::AsioErrorCategory gu_asio_ssl_category(asio::error::get_ssl_category());
 gu::AsioErrorCode::AsioErrorCode()
     : value_()
     , category_(&gu_asio_system_category)
-    , wsrep_category_()
+    , error_extra_()
 { }
 
 gu::AsioErrorCode::AsioErrorCode(int err)
     : value_(err)
     , category_(&gu_asio_system_category)
-    , wsrep_category_()
+    , error_extra_()
 { }
 
 std::string gu::AsioErrorCode::message() const
 {
     if (category_)
     {
-        return asio::error_code(value_, category_->native()).message();
+        std::string ret(
+            asio::error_code(value_, category_->native()).message());
+#ifdef GALERA_HAVE_SSL
+        if (*category_ == gu_asio_ssl_category && error_extra_)
+        {
+            ret += std::string(": ")
+                + X509_verify_cert_error_string(error_extra_);
+        }
+#endif // GALERA_HAVE_SSL
+        return ret;
     }
     else
     {
@@ -230,14 +240,7 @@ std::string gu::AsioErrorCode::message() const
 
 std::ostream& gu::operator<<(std::ostream& os, const gu::AsioErrorCode& ec)
 {
-    if (ec.category())
-    {
-        return (os << asio::error_code(ec.value(), ec.category()->native()));
-    }
-    else
-    {
-        return (os << ::strerror(ec.value()));
-    }
+    return (os << ec.message());
 }
 
 bool gu::AsioErrorCode::is_eof() const
@@ -247,14 +250,9 @@ bool gu::AsioErrorCode::is_eof() const
             value_ == asio::error::misc_errors::eof);
 }
 
-bool gu::AsioErrorCode::is_wsrep() const
-{
-    return wsrep_category_;
-}
-
 bool gu::AsioErrorCode::is_system() const
 {
-    return (not (category_ || wsrep_category_) ||
+    return (not category_ ||
             (category_ &&
              *category_ == gu_asio_system_category));
 }
@@ -413,10 +411,10 @@ static void ssl_prepare_context(const gu::Config& conf, asio::ssl::context& ctx,
             EC_KEY_free(ecdh);
         }
 #endif /* OPENSSL_HAS_SET_ECDH_AUTO | OPENSSL_HAS_SET_TMP_ECDH */
+        param = gu::conf::ssl_cert;
+        ctx.use_certificate_chain_file(conf.get(param));
         param = gu::conf::ssl_key;
         ctx.use_private_key_file(conf.get(param), asio::ssl::context::pem);
-        param = gu::conf::ssl_cert;
-        ctx.use_certificate_file(conf.get(param), asio::ssl::context::pem);
         param = gu::conf::ssl_ca;
         ctx.load_verify_file(conf.get(param, conf.get(gu::conf::ssl_cert)));
         param = gu::conf::ssl_cipher;
@@ -514,6 +512,40 @@ void gu::ssl_register_params(gu::Config& conf)
     conf.add(gu::conf::ssl_cert);
     conf.add(gu::conf::ssl_ca);
     conf.add(gu::conf::ssl_password_file);
+    conf.add(gu::conf::ssl_reload);
+    conf.add(gu::conf::socket_dynamic);
+}
+
+void gu::ssl_param_set(const std::string& key, const std::string& val, 
+                       gu::Config& conf)
+{
+    if (key == gu::conf::ssl_reload)
+    {
+        if (conf.has(conf::use_ssl) && conf.get<bool>(conf::use_ssl, false))
+        {
+            try
+            {
+#if ASIO_VERSION < 101601
+                asio::io_service io_service;
+                asio::ssl::context ctx(io_service, asio::ssl::context::sslv23);
+#else
+                asio::ssl::context ctx(asio::ssl::context::sslv23);
+#endif
+                ssl_prepare_context(conf, ctx);
+                // Send signal
+                gu::Signals::Instance().signal(gu::Signals::S_CONFIG_RELOAD_CERTIFICATE);
+            }
+            catch (asio::system_error& ec)
+            {
+                gu_throw_error(EINVAL) << "Initializing SSL context failed: "
+                                       << ::extra_error_info(ec.code());
+            }
+        }
+    }
+    else
+    {
+        throw gu::NotFound();
+    }
 }
 
 void gu::ssl_init_options(gu::Config& conf)
@@ -600,27 +632,61 @@ bool gu::is_verbose_error(const gu::AsioErrorCode& ec)
 gu::AsioIoService::AsioIoService(const gu::Config& conf)
     : impl_(std::unique_ptr<Impl>(new Impl))
     , conf_(conf)
+    , signal_connection_()
+    , dynamic_socket_(false)
 {
-#ifdef GALERA_HAVE_SSL
-    if (conf.has(conf::use_ssl) && conf.get<bool>(conf::use_ssl, false))
+    signal_connection_ = gu::Signals::Instance().connect(
+        gu::Signals::slot_type(&gu::AsioIoService::handle_signal, 
+                               this, _1));
+    if (conf.has(gu::conf::socket_dynamic))
     {
-        load_crypto_context();
+        dynamic_socket_ = conf.get<bool>(gu::conf::socket_dynamic, false);
     }
+#ifdef GALERA_HAVE_SSL
+    load_crypto_context();
 #endif // GALERA_HAVE_SSL
 }
 
-gu::AsioIoService::~AsioIoService() = default;
+gu::AsioIoService::~AsioIoService()
+{
+    signal_connection_.disconnect();
+};
+
+void gu::AsioIoService::handle_signal(const gu::Signals::SignalType& type)
+{
+    switch(type)
+    {
+    case gu::Signals::SignalType::S_CONFIG_RELOAD_CERTIFICATE:
+#ifdef GALERA_HAVE_SSL
+        load_crypto_context();
+#endif // GALERA_HAVE_SSL
+        break;
+    default:
+        break;
+    }
+}
+
+bool gu::AsioIoService::ssl_enabled() const
+{
+#ifdef GALERA_HAVE_SSL
+    return impl_->ssl_context_.get();
+#else // GALERA_HAVE_SSL
+    return false;
+#endif
+}
 
 void gu::AsioIoService::load_crypto_context()
 {
 #ifdef GALERA_HAVE_SSL
-    if (not impl_->ssl_context_)
+    if (conf_.has(conf::use_ssl) && conf_.get<bool>(conf::use_ssl, false))
     {
-        impl_->ssl_context_ = std::unique_ptr<asio::ssl::context>(
-            new asio::ssl::context(asio::ssl::context::sslv23));
+        if (not impl_->ssl_context_)
+        {
+            impl_->ssl_context_ = std::unique_ptr<asio::ssl::context>(
+                new asio::ssl::context(asio::ssl::context::sslv23));
+        }
+        ssl_prepare_context(conf_, *impl_->ssl_context_);
     }
-
-    ssl_prepare_context(conf_, *impl_->ssl_context_);
 #endif // GALERA_HAVE_SSL
 }
 

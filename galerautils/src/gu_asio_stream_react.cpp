@@ -33,7 +33,7 @@ gu::AsioStreamReact::AsioStreamReact(
     , local_addr_()
     , remote_addr_()
     , connected_()
-    , non_blocking_()
+    , non_blocking_(false)
     , in_progress_()
     , read_context_()
     , write_context_()
@@ -157,7 +157,7 @@ void gu::AsioStreamReact::connect(const gu::URI& uri) try
     }
     socket_.connect(resolve_result->endpoint());
     connected_ = true;
-    prepare_engine();
+    prepare_engine(false);
     auto result(engine_->client_handshake());
     switch (result)
     {
@@ -290,9 +290,9 @@ void gu::AsioStreamReact::connect_handler(
         return;
     }
 
-    assign_addresses();
     set_socket_options(socket_);
-    prepare_engine();
+    prepare_engine(true);
+    assign_addresses();
     GU_ASIO_DEBUG(debug_print()
                   << " AsioStreamReact::connect_handler: init handshake");
     auto result(engine_->client_handshake());
@@ -403,8 +403,10 @@ void gu::AsioStreamReact::server_handshake_handler(
                           acceptor,
                           acceptor_handler);
         break;
-    case AsioStreamEngine::eof:
     case AsioStreamEngine::error:
+        log_warn << "Handshake failed: " << engine_->last_error();
+        // Fall through
+    case AsioStreamEngine::eof:
         // Restart accepting transparently. The socket will go out of
         // scope and will be destructed.
         //
@@ -541,21 +543,22 @@ void gu::AsioStreamReact::write_handler(
 void gu::AsioStreamReact::assign_addresses()
 {
     local_addr_ = ::uri_string(
-        scheme_,
+        engine_->scheme(),
         ::escape_addr(socket_.local_endpoint().address()),
         gu::to_string(socket_.local_endpoint().port()));
     remote_addr_ = ::uri_string(
-        scheme_,
+        engine_->scheme(),
         ::escape_addr(socket_.remote_endpoint().address()),
         gu::to_string(socket_.remote_endpoint().port()));
 }
 
-void gu::AsioStreamReact::prepare_engine()
+void gu::AsioStreamReact::prepare_engine(bool non_blocking)
 {
     if (not engine_)
     {
         engine_ = AsioStreamEngine::make(io_service_, scheme_,
-                                         native_socket_handle(socket_));
+                                         native_socket_handle(socket_),
+                                         non_blocking);
     }
     else
     {
@@ -764,9 +767,9 @@ std::shared_ptr<gu::AsioSocket> gu::AsioAcceptorReact::accept()
     auto socket(std::make_shared<AsioStreamReact>(io_service_, scheme_,
                                                   nullptr));
     acceptor_.accept(socket->socket_);
-    socket->assign_addresses();
     set_socket_options(socket->socket_);
-    socket->prepare_engine();
+    socket->prepare_engine(false);
+    socket->assign_addresses();
     auto result(socket->engine_->server_handshake());
     switch (result)
     {
@@ -779,7 +782,7 @@ std::shared_ptr<gu::AsioSocket> gu::AsioAcceptorReact::accept()
                                << result;
         return std::shared_ptr<gu::AsioSocket>();
     case AsioStreamEngine::error:
-        throw_sync_op_error(*socket->engine_, "Server handshake failed");
+        throw_sync_op_error(*socket->engine_, "Handshake failed");
         return std::shared_ptr<gu::AsioSocket>(); // Keep compiler happy
     }
     return socket;
@@ -845,11 +848,11 @@ void gu::AsioAcceptorReact::accept_handler(
         return;
     }
 
-    socket->assign_addresses();
     set_socket_options(socket->socket_);
     socket->set_non_blocking(true);
     socket->connected_ = true;
-    socket->prepare_engine();
+    socket->prepare_engine(true);
+    socket->assign_addresses();
     auto result(socket->engine_->server_handshake());
     switch (result)
     {
@@ -866,7 +869,11 @@ void gu::AsioAcceptorReact::accept_handler(
                                   shared_from_this(),
                                   handler);
         break;
-    default:
+    case AsioStreamEngine::error:
+        log_warn << "Handshake failed: "
+                 << socket->engine_->last_error();
+        // Fall through
+    case AsioStreamEngine::eof:
         // Continue accepting transparently if socket handshake fails.
         // From user handler point of view this connection never existed
         // and it will go out of scope when this handler returns.

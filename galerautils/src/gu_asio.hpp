@@ -12,6 +12,7 @@
 
 #include "gu_config.hpp"
 #include "gu_uri.hpp"
+#include "gu_signals.hpp"
 
 #include <netinet/tcp.h> // tcp_info
 
@@ -30,6 +31,12 @@ namespace gu
         const std::string udp("udp"); /// UDP scheme
         const std::string ssl("ssl"); /// SSL scheme
         const std::string def("tcp"); /// default scheme (TCP)
+    }
+
+    namespace conf
+    {
+        // Enable dynamic socket support
+        const std::string socket_dynamic("socket.dynamic");
     }
 
 #ifdef GALERA_HAVE_SSL
@@ -54,6 +61,8 @@ namespace gu
         const std::string ssl_ca("socket.ssl_ca");
         /// SSL password file
         const std::string ssl_password_file("socket.ssl_password_file");
+        // SSL reload
+        const std::string ssl_reload("socket.ssl_reload");
     }
 
 
@@ -62,6 +71,9 @@ namespace gu
 
     // initialize defaults, verify set options
     void ssl_init_options(gu::Config&);
+
+    // update ssl parameters
+    void ssl_param_set(const std::string&, const std::string&, gu::Config&);
 #else
     static inline void ssl_register_params(gu::Config&) { }
     static inline void ssl_init_options(gu::Config&) { }
@@ -203,9 +215,15 @@ namespace gu
         AsioErrorCode(int value, const AsioErrorCategory& category)
             : value_(value)
             , category_(&category)
-            , wsrep_category_()
+            , error_extra_()
         { }
 
+        AsioErrorCode(int value, const AsioErrorCategory& category,
+                      int error_extra)
+            : value_(value)
+            , category_(&category)
+            , error_extra_(error_extra)
+        { }
         /**
          * Return error number.
          */
@@ -228,11 +246,6 @@ namespace gu
         bool is_eof() const;
 
         /**
-         * Return true if the error belongs to wsrep category.
-         */
-        bool is_wsrep() const;
-
-        /**
          * Return true if the error is system error.
          */
         bool is_system() const;
@@ -240,7 +253,8 @@ namespace gu
     private:
         int value_;
         const AsioErrorCategory* category_;
-        const void* wsrep_category_;
+        // Extra category specific error information
+        int error_extra_;
     };
 
     std::ostream& operator<<(std::ostream&, const AsioErrorCode&);
@@ -620,6 +634,24 @@ namespace gu
         AsioIoService operator=(const AsioIoService&) = delete;
 
         /**
+         * Handle global signals.
+         */
+        void handle_signal(const gu::Signals::SignalType&);
+
+        /**
+         * Is dynamic socket enabled
+         */
+        bool dynamic_socket_enabled() const
+        {
+            return dynamic_socket_;
+        }
+
+        /**
+         * Is SSL enabled and configured
+         */
+        bool ssl_enabled() const;
+
+        /**
          * Load crypto context.
          */
         void load_crypto_context();
@@ -695,6 +727,8 @@ namespace gu
     private:
         std::unique_ptr<Impl> impl_;
         const gu::Config& conf_;
+        gu::Signals::signal_connection signal_connection_;
+        bool dynamic_socket_;
     };
 
     class AsioSteadyTimerHandler
