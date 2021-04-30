@@ -156,7 +156,8 @@ extern "C" void* run_receiver_thread(void* arg)
     return 0;
 }
 
-static void IST_fix_addr_scheme(const gu::Config& conf, std::string& addr)
+static void IST_fix_addr_scheme(const gu::Config& conf, std::string& addr,
+                                bool tls_service_enabled)
 {
     /* check if explicit scheme is present */
     if (addr.find("://") == std::string::npos)
@@ -170,7 +171,8 @@ static void IST_fix_addr_scheme(const gu::Config& conf, std::string& addr)
             {
                 dynamic_socket = conf.get<bool>(gu::conf::socket_dynamic, false);
             }
-            if (ssl_key.length() != 0 && not dynamic_socket)
+            if ((ssl_key.length() != 0 || tls_service_enabled) &&
+                not dynamic_socket)
             {
                 addr.insert(0, "ssl://");
                 return;
@@ -209,7 +211,8 @@ static void IST_fix_addr_port(const gu::Config& conf, const gu::URI& uri,
     }
 }
 
-std::string galera::IST_determine_recv_addr (gu::Config& conf)
+std::string galera::IST_determine_recv_addr (gu::Config& conf,
+                                             bool tls_service_enabled)
 {
     std::string recv_addr;
 
@@ -232,7 +235,7 @@ std::string galera::IST_determine_recv_addr (gu::Config& conf)
         }
     }
 
-    IST_fix_addr_scheme(conf, recv_addr);
+    IST_fix_addr_scheme(conf, recv_addr, tls_service_enabled);
     gu::URI ra_uri(recv_addr);
 
     if (!conf.has(galera::BASE_HOST_KEY))
@@ -244,13 +247,14 @@ std::string galera::IST_determine_recv_addr (gu::Config& conf)
     return recv_addr;
 }
 
-std::string galera::IST_determine_recv_bind(gu::Config& conf)
+std::string galera::IST_determine_recv_bind(gu::Config& conf,
+                                            bool tls_service_enabled)
 {
     std::string recv_bind;
 
     recv_bind = conf.get(galera::ist::Receiver::RECV_BIND);
 
-    IST_fix_addr_scheme(conf, recv_bind);
+    IST_fix_addr_scheme(conf, recv_bind, tls_service_enabled);
 
     gu::URI rb_uri(recv_bind);
 
@@ -269,10 +273,12 @@ galera::ist::Receiver::prepare(wsrep_seqno_t const first_seqno,
     ready_ = false;
     version_ = version;
     source_id_ = source_id;
-    recv_addr_ = IST_determine_recv_addr(conf_);
+    recv_addr_ = IST_determine_recv_addr(
+        conf_, io_service_.tls_service() != nullptr);
     try
     {
-        recv_bind_ = IST_determine_recv_bind(conf_);
+        recv_bind_ = IST_determine_recv_bind(
+            conf_, io_service_.tls_service() != nullptr);
     }
     catch (gu::NotSet&)
     {

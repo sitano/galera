@@ -171,8 +171,10 @@ namespace galera
 
     // Helpers to determine receive addr and receive bind. Public for
     // testing.
-    std::string IST_determine_recv_addr(gu::Config& conf);
-    std::string IST_determine_recv_bind(gu::Config& conf);
+    std::string IST_determine_recv_addr(gu::Config& conf,
+                                        bool tls_service_enabled);
+    std::string IST_determine_recv_bind(gu::Config& conf,
+                                        bool tls_service_enabled);
 
 } // namespace galera
 

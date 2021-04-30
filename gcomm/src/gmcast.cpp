@@ -86,7 +86,8 @@ gcomm::GMCast::GMCast(Protonet& net, const gu::URI& uri,
                                  "false") :
                      false),
 #ifdef GALERA_HAVE_SSL
-    use_ssl_      (param<bool>(conf_, uri, gu::conf::use_ssl, "false")),
+    use_ssl_      (param<bool>(conf_, uri, gu::conf::use_ssl, "false") ||
+                   pnet_.tls_service_enabled()),
 #else
     use_ssl_(),
 #endif // GALERA_HAVE_SSL
