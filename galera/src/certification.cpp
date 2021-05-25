@@ -186,10 +186,7 @@ check_against(const galera::KeyEntryNG*   const found,
             }
             /* fall through */
         case DEPENDENCY:
-            if (conflict)
-                depends_seqno = WSREP_SEQNO_UNDEFINED;
-            else
-                depends_seqno = std::max(ref_trx->global_seqno(), depends_seqno);
+            depends_seqno = std::max(ref_trx->global_seqno(), depends_seqno);
             /* fall through */
         case NOTHING:;
         }
@@ -205,6 +202,7 @@ certify_and_depend_v3to5(const galera::KeyEntryNG*   const found,
                          galera::TrxHandleSlave*     const trx,
                          bool                        const log_conflict)
 {
+    bool ret(false);
     wsrep_seqno_t depends_seqno(trx->depends_seqno());
     wsrep_key_type_t const key_type(key.wsrep_type(trx->version()));
 
@@ -236,14 +234,13 @@ certify_and_depend_v3to5(const galera::KeyEntryNG*   const found,
           check_against<WSREP_KEY_SHARED>
           (found, key, key_type, trx, log_conflict, depends_seqno))))
     {
-        return true;
+        ret = true;
     }
-    else
-    {
-        if (depends_seqno > trx->depends_seqno())
-            trx->set_depends_seqno(depends_seqno);
-        return false;
-    }
+
+    if (depends_seqno > trx->depends_seqno())
+        trx->set_depends_seqno(depends_seqno);
+
+    return ret;
 }
 
 /* returns true on collision, false otherwise */
@@ -377,6 +374,7 @@ galera::Certification::do_test_v3to5(TrxHandleSlave* trx, bool store_keys)
 
         if (certify_v3to5(cert_index_ng_, key, trx, store_keys, log_conflicts_))
         {
+            trx->set_depends_seqno(std::max(trx->depends_seqno(), last_pa_unsafe_));
             goto cert_fail;
         }
     }
@@ -493,8 +491,6 @@ galera::Certification::do_test(const TrxHandleSlavePtr& trx, bool store_keys)
         gu_throw_fatal << "certification test for version "
                        << version_ << " not implemented";
     }
-
-    assert(TEST_FAILED == res || trx->depends_seqno() >= 0);
 
     if (store_keys == true && res == TEST_OK)
     {
@@ -1143,8 +1139,6 @@ galera::Certification::test(const TrxHandleSlavePtr& trx, bool store_keys)
     const TestResult ret
         (trx->preordered() ?
          do_test_preordered(trx.get()) : do_test(trx, store_keys));
-
-    assert(TEST_FAILED == ret || trx->depends_seqno() >= 0);
 
     if (gu_unlikely(ret != TEST_OK)) { trx->mark_dummy(); }
 
