@@ -4,7 +4,7 @@
 
 message(STATUS "CMake version ${CMAKE_VERSION}")
 cmake_minimum_required(VERSION 2.8)
-project(galera-4)
+project(galera-enterprise-4)
 
 include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
