@@ -31,6 +31,7 @@ add_library(galera
 target_include_directories(galera
   PRIVATE
   ${CMAKE_SOURCE_DIR}/wsrep/src
+  ${CMAKE_SOURCE_DIR}/wsrep/ps
   )
 
 # TODO: Fix.
@@ -60,6 +61,7 @@ target_compile_definitions(galera_smm_static
 target_include_directories(galera_smm_static
   PRIVATE
   ${CMAKE_SOURCE_DIR}/wsrep/src
+  ${CMAKE_SOURCE_DIR}/wsrep/ps
   )
 
 # TODO: Fix.
@@ -83,6 +85,7 @@ set_target_properties(galera_smm PROPERTIES
 target_include_directories(galera_smm
   PRIVATE
   ${CMAKE_SOURCE_DIR}/wsrep/src
+  ${CMAKE_SOURCE_DIR}/wsrep/ps
   )
 
 target_compile_definitions(galera_smm

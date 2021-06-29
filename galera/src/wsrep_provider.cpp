@@ -2,6 +2,9 @@
 // Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
+#include "wsrep_api.h"
+#include "wsrep_ps.h"
+
 #include "key_data.hpp"
 #include "gu_serialize.hpp"
 #include "gu_thread_keys.hpp"
@@ -1713,4 +1716,29 @@ wsrep_status_t wsrep_init_membership_service_v1(
 
 extern "C" void wsrep_deinit_membership_service_v1()
 {
+}
+
+extern "C"
+wsrep_status_t wsrep_ps_fetch_cluster_info (wsrep_t* gh,
+                                            wsrep_node_info_t* nodes,
+                                            uint32_t* size)
+{
+    assert(gh != 0);
+    assert(gh->ctx != 0);
+
+    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    return repl->fetch_pfs_info(nodes, size);
+}
+
+extern "C"
+wsrep_status_t wsrep_ps_fetch_node_stat (wsrep_t* gh,
+                                         wsrep_node_stat_t* node)
+{
+    assert(gh != 0);
+    assert(gh->ctx != 0);
+
+    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    return repl->fetch_pfs_stat(node);
 }

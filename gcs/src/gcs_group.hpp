@@ -11,6 +11,8 @@
 #ifndef _gcs_group_h_
 #define _gcs_group_h_
 
+#include <wsrep_ps.h> // pfs declarations
+
 #include "gcs_gcache.hpp"
 #include "gcs_node.hpp"
 #include "gcs_recv_msg.hpp"
@@ -297,12 +299,22 @@ extern int
 gcs_group_param_set(gcs_group_t& group,
                     const std::string& key, const std::string& val);
 
-extern void
+extern int
 gcs_group_get_status(const gcs_group_t* group, gu::Status& status);
 
 extern void
 gcs_group_get_membership(const gcs_group_t& group,
                          wsrep_allocator_cb alloc,
                          struct wsrep_membership** memb);
+
+extern int
+gcs_group_fetch_pfs_info(const gcs_group_t* group,
+                         wsrep_node_info_t* entries,
+                         uint32_t*          size,
+                         uint32_t*          my_idx);
+
+extern int
+gcs_group_fetch_pfs_stat(const gcs_group_t* group,
+                         wsrep_node_stat_t* node);
 
 #endif /* _gcs_group_h_ */

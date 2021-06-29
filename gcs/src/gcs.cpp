@@ -2356,12 +2356,13 @@ gcs_flush_stats(gcs_conn_t* conn)
     conn->stats_fc_received  = 0;
 }
 
-void gcs_get_status(gcs_conn_t* conn, gu::Status& status)
+int gcs_get_status(gcs_conn_t* conn, gu::Status& status)
 {
     if (conn->state < GCS_CONN_CLOSED)
     {
-        gcs_core_get_status(conn->core, status);
+        return gcs_core_get_status(conn->core, status);
     }
+    return 0;
 }
 
 void gcs_get_membership(const gcs_conn_t* const   conn,
@@ -2369,6 +2370,30 @@ void gcs_get_membership(const gcs_conn_t* const   conn,
                         struct wsrep_membership** memb)
 {
     gcs_core_get_membership(conn->core, alloc, memb);
+}
+
+int gcs_fetch_pfs_info (gcs_conn_t* conn, wsrep_node_info_t* entries,
+                        uint32_t* size, uint32_t* my_idx)
+{
+    if (conn->state < GCS_CONN_CLOSED)
+    {
+        return gcs_core_fetch_pfs_info(conn->core, entries, size, my_idx);
+    }
+    else
+    {
+        *size = 0;
+        *my_idx = -1;
+        return -ENOTCONN;
+    }
+}
+
+int gcs_fetch_pfs_stat (gcs_conn_t* conn, wsrep_node_stat_t* node)
+{
+    if (conn->state < GCS_CONN_CLOSED)
+    {
+        return gcs_core_fetch_pfs_stat(conn->core, node);
+    }
+    return -ENOTCONN;
 }
 
 static long

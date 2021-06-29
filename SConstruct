@@ -449,7 +449,7 @@ conf = Configure(env, custom_tests = {
     'CheckStdSeedSeq': CheckStdSeedSeq
 })
 
-conf.env.Append(CPPPATH = [ '#/wsrep/src' ])
+conf.env.Append(CPPPATH = [ '#/wsrep/src' '#/wsrep/ps' ])
 
 # System headers and libraries
 

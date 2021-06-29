@@ -21,6 +21,8 @@
 #ifndef _gcs_core_h_
 #define _gcs_core_h_
 
+#include <wsrep_ps.h> // pfs declarations
+
 #include "gcs.hpp"
 #include "gcs_act.hpp"
 #include "gcs_act_proto.hpp"
@@ -170,7 +172,15 @@ gcs_core_param_set (gcs_core_t* core, const char* key, const char* value);
 extern const char*
 gcs_core_param_get (gcs_core_t* core, const char* key);
 
-void gcs_core_get_status(gcs_core_t* core, gu::Status& status);
+int gcs_core_get_status(gcs_core_t* core, gu::Status& status);
+
+int gcs_core_fetch_pfs_info(gcs_core_t*        core,
+                            wsrep_node_info_t* entries,
+                            uint32_t*          size,
+                            uint32_t*          my_idx);
+
+int gcs_core_fetch_pfs_stat(gcs_core_t*        core,
+                            wsrep_node_stat_t* node);
 
 void gcs_core_get_membership(const gcs_core_t* core,
                              wsrep_allocator_cb alloc,

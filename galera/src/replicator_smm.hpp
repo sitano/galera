@@ -161,6 +161,9 @@ namespace galera
         void                          stats_reset();
         void                          stats_free(struct wsrep_stats_var*);
 
+        wsrep_status_t fetch_pfs_info(wsrep_node_info_t* nodes, uint32_t* size);
+        wsrep_status_t fetch_pfs_stat(wsrep_node_stat_t* node);
+
         /*! @throws NotFound */
         void           set_param (const std::string& key,
                                   const std::string& value);

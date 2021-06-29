@@ -242,6 +242,10 @@ do
     shift
 done
 
+        if which dpkg-buildpackage >/dev/null 2>&1
+        then
+            echo ""
+        else
 if [ "$OPT"   == "yes" ]; then CONFIGURE="yes";
    conf_flags="--disable-debug --disable-dbug";
 fi

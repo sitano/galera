@@ -6,6 +6,7 @@
 #define GALERA_REPLICATOR_HPP
 
 #include "wsrep_api.h"
+#include "wsrep_ps.h"
 #include "galera_exception.hpp"
 #include "trx_handle.hpp"
 
@@ -127,6 +128,10 @@ namespace galera
         virtual void                          stats_reset() = 0;
         // static void stats_free(struct wsrep_stats_var*) must be declared in
         // the child class
+
+        virtual wsrep_status_t fetch_pfs_info(wsrep_node_info_t* nodes,
+                                    uint32_t* size) = 0;
+        virtual wsrep_status_t fetch_pfs_stat(wsrep_node_stat_t* node) = 0;
 
         /*! @throws NotFound */
         virtual void        param_set (const std::string& key,

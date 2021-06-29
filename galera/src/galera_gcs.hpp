@@ -62,9 +62,14 @@ namespace galera
                              size_t          data_len) = 0;
         virtual void    get_stats(gcs_stats*) const = 0;
         virtual void    flush_stats() = 0;
-        virtual void    get_status(gu::Status&) const = 0;
+        virtual int     get_status(gu::Status&) const = 0;
         virtual void    get_membership(wsrep_allocator_cb        alloc,
                                        struct wsrep_membership** memb) const =0;
+        virtual int     fetch_pfs_info(wsrep_node_info_t* entries,
+                                       uint32_t* size,
+                                       uint32_t* my_idx) = 0;
+        virtual int     fetch_pfs_stat(wsrep_node_stat_t* node) = 0;
+
         /*! @throws NotFound */
         virtual void    param_set (const std::string& key,
                                    const std::string& value) = 0;
@@ -236,9 +241,21 @@ namespace galera
             return gcs_flush_stats(conn_);
         }
 
-        void get_status(gu::Status& status) const
+        int get_status(gu::Status& status) const
         {
-            gcs_get_status(conn_, status);
+            return gcs_get_status(conn_, status);
+        }
+
+        int fetch_pfs_info(wsrep_node_info_t* entries,
+                           uint32_t* size,
+                           uint32_t* my_idx)
+        {
+            return gcs_fetch_pfs_info(conn_, entries, size, my_idx);
+        }
+
+        int fetch_pfs_stat(wsrep_node_stat_t* node)
+        {
+            return gcs_fetch_pfs_stat(conn_, node);
         }
 
         void get_membership(wsrep_allocator_cb alloc,
@@ -419,8 +436,24 @@ namespace galera
 
         void flush_stats() {}
 
-        void get_status(gu::Status& status) const
-        {}
+        int get_status(gu::Status& status) const
+        {
+            return 0;
+        }
+
+        int fetch_pfs_info(wsrep_node_info_t* entries,
+                           uint32_t* size,
+                           uint32_t* my_idx)
+        {
+            *size = 0;
+            *my_idx = -1;
+            return 0;
+        }
+
+        int fetch_pfs_stat(wsrep_node_stat_t* node)
+        {
+            return 0;
+        }
 
         void get_membership(wsrep_allocator_cb        alloc,
                             struct wsrep_membership** memb) const

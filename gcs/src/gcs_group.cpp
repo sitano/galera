@@ -2105,8 +2105,7 @@ gcs_group_param_set(gcs_group_t& group,
     return 1;
 }
 
-void
-gcs_group_get_status (const gcs_group_t* group, gu::Status& status)
+int gcs_group_get_status (const gcs_group_t* group, gu::Status& status)
 {
     int desync_count; // make sure it is not initialized
 
@@ -2122,6 +2121,8 @@ gcs_group_get_status (const gcs_group_t* group, gu::Status& status)
     }
 
     status.insert("desync_count", gu::to_string(desync_count));
+
+    return 0;
 }
 
 void
@@ -2209,5 +2210,84 @@ gcs_group_get_membership(const gcs_group_t&        group,
         case GCS_NODE_STATE_MAX:
             mn.status = WSREP_MEMBER_ERROR;
         }
+    }
+}
+
+int gcs_group_fetch_pfs_info(const gcs_group_t* group,
+                             wsrep_node_info_t* entries,
+                             uint32_t*          size,
+                             uint32_t*          my_idx)
+{
+    int num = (int) group->num;
+    if (*size < (uint32_t) num)
+    {
+        *size = 0;
+        *my_idx = -1;
+        return -ENOMEM;
+    }
+
+    int i;
+    for (i = 0; i < num; i++)
+    {
+        const gcs_node_t& node(group->nodes[i]);
+
+        entries[i].wsrep_local_index = i;
+
+        strncpy(entries[i].wsrep_node_id, node.id, WSREP_UUID_STR_LEN);
+        entries[i].wsrep_node_id[WSREP_UUID_STR_LEN] = 0;
+
+        strncpy(entries[i].wsrep_host_name, node.name,
+                WSREP_HOSTNAME_LENGTH);
+        entries[i].wsrep_host_name[WSREP_HOSTNAME_LENGTH] = 0;
+
+        gu_uuid_print(&group->group_uuid,
+                      entries[i].wsrep_cluster_state_uuid,
+                      WSREP_UUID_STR_LEN + 1);
+
+        gu_uuid_print(&group->state_uuid,
+                      entries[i].wsrep_local_state_uuid,
+                      WSREP_UUID_STR_LEN + 1);
+
+        strncpy(entries[i].wsrep_status,
+                gcs_node_state_to_str(node.status),
+                WSREP_STATUS_LENGTH);
+        entries[i].wsrep_status[WSREP_STATUS_LENGTH] = 0;
+
+        entries[i].wsrep_segment = node.segment;
+
+        entries[i].wsrep_last_applied = node.last_applied;
+        entries[i].wsrep_last_committed = 0;
+        entries[i].wsrep_replicated = 0;
+        entries[i].wsrep_replicated_bytes = 0;
+        entries[i].wsrep_received = 0;
+        entries[i].wsrep_received_bytes = 0;
+        entries[i].wsrep_local_bf_aborts = 0;
+        entries[i].wsrep_local_commits = 0;
+        entries[i].wsrep_local_cert_failures = 0;
+        entries[i].wsrep_apply_window = 0;
+        entries[i].wsrep_commit_window = 0;
+    }
+
+    *size = i;
+    *my_idx = (int) group->my_idx;
+
+    return 0;
+}
+
+int gcs_group_fetch_pfs_stat(const gcs_group_t* group,
+                             wsrep_node_stat_t* entry)
+{
+    int my_idx = (int) group->my_idx;
+    entry->wsrep_local_index = my_idx;
+    if (my_idx >= 0)
+    {
+        const gcs_node_t& node(group->nodes[my_idx]);
+        strncpy(entry->wsrep_node_id, node.id, WSREP_UUID_STR_LEN);
+        entry->wsrep_node_id[WSREP_UUID_STR_LEN] = 0;
+        return 0;
+    }
+    else
+    {
+        return -ENOTCONN;
     }
 }

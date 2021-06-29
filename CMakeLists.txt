@@ -21,6 +21,7 @@ include_directories(
   ${CMAKE_SOURCE_DIR}/gcache/src
   ${CMAKE_SOURCE_DIR}/gcs/src
   ${CMAKE_SOURCE_DIR}/wsrep/src
+  ${CMAKE_SOURCE_DIR}/wsrep/ps
   )
 
 # Options to control compiler options and error behavior.

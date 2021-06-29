@@ -14,6 +14,7 @@
 #include "wsrep_membership_service.h"
 
 #include "gcs_gcache.hpp"
+#include <wsrep_ps.h> // pfs declarations
 
 #include <gu_config.h>
 #include <gu_buf.h>
@@ -503,10 +504,14 @@ extern void gcs_get_stats (gcs_conn_t *conn, struct gcs_stats* stats);
 /*! flushes stats counters */
 extern void gcs_flush_stats(gcs_conn_t *conn);
 
-void gcs_get_status(gcs_conn_t* conn, gu::Status& status);
+int gcs_get_status(gcs_conn_t* conn, gu::Status& status);
 void gcs_get_membership(const gcs_conn_t* conn,
                         wsrep_allocator_cb alloc,
                         struct wsrep_membership** memb);
+
+int gcs_fetch_pfs_info (gcs_conn_t* conn, wsrep_node_info_t* entries,
+                        uint32_t* size, uint32_t* my_idx);
+int gcs_fetch_pfs_stat (gcs_conn_t* conn, wsrep_node_stat_t* node);
 
 /*! A node with this name will be treated as a stateless arbitrator */
 #define GCS_ARBITRATOR_NAME "garb"

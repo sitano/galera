@@ -1581,16 +1581,59 @@ gcs_core_param_get (gcs_core_t* core, const char* key)
     }
 }
 
-void gcs_core_get_status(gcs_core_t* core, gu::Status& status)
+int gcs_core_get_status(gcs_core_t* core, gu::Status& status)
 {
+    int rc = 0;
     if (gu_mutex_lock(&core->send_lock))
-        gu_throw_fatal << "could not lock mutex";
+    {
+        return -ENOTRECOVERABLE;
+    }
     if (core->state < CORE_CLOSED)
     {
         gcs_group_get_status(&core->group, status);
         core->backend.status_get(&core->backend, status);
     }
     gu_mutex_unlock(&core->send_lock);
+    return rc;
+}
+
+int gcs_core_fetch_pfs_info(gcs_core_t*        core,
+                            wsrep_node_info_t* entries,
+                            uint32_t*          size,
+                            uint32_t*          my_idx)
+{
+    int rc = -ENOTCONN;
+    if (gu_mutex_lock(&core->send_lock))
+    {
+        return -ENOTRECOVERABLE;
+    }
+    if (core->state < CORE_CLOSED)
+    {
+        rc = gcs_group_fetch_pfs_info(&core->group, entries, size, my_idx);
+    }
+    else
+    {
+        *size = 0;
+        *my_idx = -1;
+    }
+    gu_mutex_unlock(&core->send_lock);
+    return rc;
+}
+
+int gcs_core_fetch_pfs_stat(gcs_core_t*        core,
+                            wsrep_node_stat_t* node)
+{
+    int rc = -ENOTCONN;
+    if (gu_mutex_lock(&core->send_lock))
+    {
+        return -ENOTRECOVERABLE;
+    }
+    if (core->state < CORE_CLOSED)
+    {
+        rc = gcs_group_fetch_pfs_stat(&core->group, node);
+    }
+    gu_mutex_unlock(&core->send_lock);
+    return rc;
 }
 
 void gcs_core_get_membership(const gcs_core_t* const   core,
