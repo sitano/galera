@@ -565,14 +565,25 @@ gcache::PageStore::repossess(BufferHeader* bh, const void* ptr)
 {
     assert(BH_is_released(bh)); // will be changed by the caller
 
-    Plain& p(bh2Plain(bh));
-    assert(p.freed_);
+    Page* page;
 
-    p.freed_ = false;
-    /* don't increment reference counter or decrypt ciphertext - this method
-       is not to acquire resource, it is to reverse the effects of free() */
+    if (encrypt_cb_)
+    {
+        Plain& p(bh2Plain(bh));
+        assert(p.freed_);
 
-    p.page_->repossess(bh, ptr);
+        p.freed_ = false;
+        /* don't increment reference counter or decrypt ciphertext - this method
+           is not to acquire resource, it is to reverse the effects of free() */
+
+        page = p.page_;
+    }
+    else
+    {
+        page = reinterpret_cast<Page*>(bh->ctx);
+    }
+
+    page->repossess(bh, ptr);
 }
 
 void
