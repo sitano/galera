@@ -179,6 +179,12 @@ static void IST_fix_addr_scheme(const gu::Config& conf, std::string& addr,
             }
         }
         catch (gu::NotSet&) {}
+#else
+        if (tls_service_enabled)
+        {
+            addr.insert(0, "ssl://");
+            return;
+        }
 #endif // GALERA_HAVE_SSL
         addr.insert(0, "tcp://");
     }
