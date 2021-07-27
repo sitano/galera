@@ -20,6 +20,10 @@ ifneq (,$(filter revno=%,$(DEB_BUILD_OPTIONS)))
 endif
 
 
+# Set unit test timeout multiplier to make slow tests
+# pass on loaded builders.
+export CK_TIMEOUT_MULTIPLIER=5
+
 override_dh_auto_test:
 	dh_auto_test -O--no-parallel -- ARGS=--output-on-failure
 
