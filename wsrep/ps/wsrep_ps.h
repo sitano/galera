@@ -10,7 +10,11 @@ extern "C"
 {
 #endif /* __cplusplus */
 
-#define WSREP_PS_API_VERSION 0x100
+/* Current API version: */
+#define WSREP_PS_API_VERSION 0x200
+
+/* Minimum supported API version on the calling server side: */
+#define WSREP_PS_MIN_API_VERSION 0x200
 
 /*!
  * Structures for communicating information that will be exposed
@@ -23,6 +27,9 @@ extern "C"
 /* Information about the current state of all nodes in the cluster: */
 
 typedef struct {
+  /* Version number for this data structure: */
+  int      wsrep_version;
+
   /* Local node index: */
   uint32_t wsrep_local_index;
 
@@ -74,16 +81,19 @@ typedef struct {
 
   /* Average distance between the highest and lowest concurrently
      applied seqno: */
-  uint64_t wsrep_apply_window;
+  double wsrep_apply_window;
 
   /* Average distance between the highest and lowest concurrently
      committed seqno: */
-  uint64_t wsrep_commit_window;
+  double wsrep_commit_window;
 } wsrep_node_info_t;
 
 /*! Data structure with statistics of the current node: */
 
 typedef struct {
+  /* Version number for this data structure: */
+  int      wsrep_version;
+
   /* Local node index: */
   int      wsrep_local_index;
 
@@ -153,30 +163,73 @@ typedef struct {
  * @brief Get general cluster information to expose through
  * Performance Schema.
  *
- * @param wsrep provider handle.
- * @param nodes array of node information to populate.
- * @param size  size of array (in/out parameter).
+ * @param wsrep       wsrep provider handle.
+ * @param nodes       array of data structures with the information
+ *                    about the cluster members.
+ * @param size        size of the nodes array.
+ * @param my_index    index of the current node.
+ * @param max_version the maximum version number of the data
+ *                    structure that is supported by the server
+ *                    calling this function.
  */
 typedef wsrep_status_t
-  (*wsrep_ps_fetch_cluster_info_t) (wsrep_t* wsrep,
-                                    wsrep_node_info_t* nodes,
-                                    uint32_t* size);
+  (*wsrep_ps_fetch_cluster_info_t) (wsrep_t*            wsrep,
+                                    wsrep_node_info_t** nodes,
+                                    uint32_t*           size,
+                                    int32_t*            my_index,
+                                    uint32_t            max_version);
 
-#define WSREP_PS_FETCH_CLUSTER_INFO_FUNC "wsrep_ps_fetch_cluster_info"
+#define WSREP_PS_FETCH_CLUSTER_INFO_FUNC "wsrep_ps_fetch_cluster_info_v2"
 
 /*!
- * @brief Get current node information to expose through
+ * @brief Freeing memory occupied by cluster information.
+ *
+ * @param wsrep       wsrep provider handle.
+ * @param nodes       array of data structures with the information
+ *                    about the cluster members.
+ */
+typedef void
+  (*wsrep_ps_free_cluster_info_t) (wsrep_t*           wsrep,
+                                   wsrep_node_info_t* nodes);
+
+#define WSREP_PS_FREE_CLUSTER_INFO_FUNC "wsrep_ps_free_cluster_info"
+
+/*!
+ * @brief Get the statistical information to expose through
  * Performance Schema.
  *
- * @param wsrep provider handle.
- * @param node  data structure with information about the node
- *              (will be filled with data, output parameter).
+ * @param wsrep       wsrep provider handle.
+ * @param nodes       array of data structures with the statistical
+ *                    information about the cluster nodes. Currently
+ *                    only one item is returned.
+ * @param size        size of the nodes array (currently = 1).
+ * @param my_index    index of the current node.
+ * @param max_version the maximum version number of the data
+ *                    structure that is supported by the server
+ *                    calling this function.
  */
 typedef wsrep_status_t
-  (*wsrep_ps_fetch_node_stat_t) (wsrep_t* wsrep,
-                                 wsrep_node_stat_t* node);
+  (*wsrep_ps_fetch_node_stat_t) (wsrep_t*            wsrep,
+                                 wsrep_node_stat_t** nodes,
+                                 uint32_t*           size,
+                                 int32_t*            my_index,
+                                 uint32_t            max_version);
 
-#define WSREP_PS_FETCH_NODE_STAT_FUNC "wsrep_ps_fetch_node_stat"
+#define WSREP_PS_FETCH_NODE_STAT_FUNC "wsrep_ps_fetch_node_stat_v2"
+
+/*!
+ * @brief Freeing memory occupied by statistical information.
+ *
+ * @param wsrep       wsrep provider handle.
+ * @param nodes       array of data structures with the statistical
+ *                    information about the cluster nodes.
+ */
+typedef void
+  (*wsrep_ps_free_node_stat_t) (wsrep_t*           wsrep,
+                                wsrep_node_stat_t* nodes);
+
+#define WSREP_PS_FREE_NODE_STAT_FUNC "wsrep_ps_free_node_stat"
+
 
 #ifdef __cplusplus
 }

@@ -1597,10 +1597,11 @@ int gcs_core_get_status(gcs_core_t* core, gu::Status& status)
     return rc;
 }
 
-int gcs_core_fetch_pfs_info(gcs_core_t*        core,
-                            wsrep_node_info_t* entries,
-                            uint32_t*          size,
-                            uint32_t*          my_idx)
+int gcs_core_fetch_pfs_info(gcs_core_t*         core,
+                            wsrep_node_info_t** nodes,
+                            uint32_t*           size,
+                            int32_t*            my_index,
+                            uint32_t            max_version)
 {
     int rc = -ENOTCONN;
     if (gu_mutex_lock(&core->send_lock))
@@ -1609,19 +1610,18 @@ int gcs_core_fetch_pfs_info(gcs_core_t*        core,
     }
     if (core->state < CORE_CLOSED)
     {
-        rc = gcs_group_fetch_pfs_info(&core->group, entries, size, my_idx);
-    }
-    else
-    {
-        *size = 0;
-        *my_idx = -1;
+        rc = gcs_group_fetch_pfs_info(&core->group, nodes, size, my_index,
+                                      max_version);
     }
     gu_mutex_unlock(&core->send_lock);
     return rc;
 }
 
-int gcs_core_fetch_pfs_stat(gcs_core_t*        core,
-                            wsrep_node_stat_t* node)
+int gcs_core_fetch_pfs_stat(gcs_core_t*         core,
+                            wsrep_node_stat_t** nodes,
+                            uint32_t*           size,
+                            int32_t*            my_index,
+                            uint32_t            max_version)
 {
     int rc = -ENOTCONN;
     if (gu_mutex_lock(&core->send_lock))
@@ -1630,7 +1630,8 @@ int gcs_core_fetch_pfs_stat(gcs_core_t*        core,
     }
     if (core->state < CORE_CLOSED)
     {
-        rc = gcs_group_fetch_pfs_stat(&core->group, node);
+        rc = gcs_group_fetch_pfs_stat(&core->group, nodes, size, my_index,
+                                      max_version);
     }
     gu_mutex_unlock(&core->send_lock);
     return rc;

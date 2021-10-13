@@ -7,7 +7,9 @@
             wsrep_deinit_tls_service_v1;
             wsrep_init_membership_service_v1;
             wsrep_deinit_membership_service_v1;
-            wsrep_ps_fetch_cluster_info;
-            wsrep_ps_fetch_node_stat;
+            wsrep_ps_fetch_cluster_info_v2;
+            wsrep_ps_fetch_node_stat_v2;
+            wsrep_ps_free_cluster_info;
+            wsrep_ps_free_node_stat;
     local:  *;
 };

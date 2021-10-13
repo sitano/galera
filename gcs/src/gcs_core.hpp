@@ -174,13 +174,17 @@ gcs_core_param_get (gcs_core_t* core, const char* key);
 
 int gcs_core_get_status(gcs_core_t* core, gu::Status& status);
 
-int gcs_core_fetch_pfs_info(gcs_core_t*        core,
-                            wsrep_node_info_t* entries,
-                            uint32_t*          size,
-                            uint32_t*          my_idx);
+int gcs_core_fetch_pfs_info(gcs_core_t*         core,
+                            wsrep_node_info_t** nodes,
+                            uint32_t*           size,
+                            int32_t*            my_index,
+                            uint32_t            max_version);
 
-int gcs_core_fetch_pfs_stat(gcs_core_t*        core,
-                            wsrep_node_stat_t* node);
+int gcs_core_fetch_pfs_stat(gcs_core_t*         core,
+                            wsrep_node_stat_t** nodes,
+                            uint32_t*           size,
+                            int32_t*            my_index,
+                            uint32_t            max_version);
 
 void gcs_core_get_membership(const gcs_core_t* core,
                              wsrep_allocator_cb alloc,

@@ -2372,28 +2372,52 @@ void gcs_get_membership(const gcs_conn_t* const   conn,
     gcs_core_get_membership(conn->core, alloc, memb);
 }
 
-int gcs_fetch_pfs_info (gcs_conn_t* conn, wsrep_node_info_t* entries,
-                        uint32_t* size, uint32_t* my_idx)
+int gcs_fetch_pfs_info (gcs_conn_t*         conn,
+                        wsrep_node_info_t** nodes,
+                        uint32_t*           size,
+                        int32_t*            my_index,
+                        uint32_t            max_version)
 {
+    int rc;
     if (conn->state < GCS_CONN_CLOSED)
     {
-        return gcs_core_fetch_pfs_info(conn->core, entries, size, my_idx);
+        rc = gcs_core_fetch_pfs_info(conn->core, nodes, size, my_index,
+                                     max_version);
     }
     else
     {
-        *size = 0;
-        *my_idx = -1;
-        return -ENOTCONN;
+        rc = -ENOTCONN;
     }
+    if (rc) {
+        *nodes = NULL;
+        *size = 0;
+        *my_index = -1;
+    }
+    return rc;
 }
 
-int gcs_fetch_pfs_stat (gcs_conn_t* conn, wsrep_node_stat_t* node)
+int gcs_fetch_pfs_stat (gcs_conn_t*         conn,
+                        wsrep_node_stat_t** nodes,
+                        uint32_t*           size,
+                        int32_t*            my_index,
+                        uint32_t            max_version)
 {
+    int rc;
     if (conn->state < GCS_CONN_CLOSED)
     {
-        return gcs_core_fetch_pfs_stat(conn->core, node);
+        rc = gcs_core_fetch_pfs_stat(conn->core, nodes, size, my_index,
+                                     max_version);
     }
-    return -ENOTCONN;
+    else
+    {
+        rc = -ENOTCONN;
+    }
+    if (rc) {
+        *nodes = NULL;
+        *size = 0;
+        *my_index = -1;
+    }
+    return rc;
 }
 
 static long

@@ -1719,26 +1719,57 @@ extern "C" void wsrep_deinit_membership_service_v1()
 }
 
 extern "C"
-wsrep_status_t wsrep_ps_fetch_cluster_info (wsrep_t* gh,
-                                            wsrep_node_info_t* nodes,
-                                            uint32_t* size)
+wsrep_status_t
+    wsrep_ps_fetch_cluster_info_v2 (wsrep_t*            gh,
+                                    wsrep_node_info_t** nodes,
+                                    uint32_t*           size,
+                                    int32_t*            my_index,
+                                    uint32_t            max_version)
 {
     assert(gh != 0);
     assert(gh->ctx != 0);
 
     REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
 
-    return repl->fetch_pfs_info(nodes, size);
+    return repl->fetch_pfs_info(nodes, size, my_index, max_version);
 }
 
 extern "C"
-wsrep_status_t wsrep_ps_fetch_node_stat (wsrep_t* gh,
-                                         wsrep_node_stat_t* node)
+void wsrep_ps_free_cluster_info (wsrep_t* gh,
+                                 wsrep_node_info_t* nodes)
 {
     assert(gh != 0);
     assert(gh->ctx != 0);
 
     REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
 
-    return repl->fetch_pfs_stat(node);
+    repl->free_pfs_info(nodes);
+}
+
+extern "C"
+wsrep_status_t
+    wsrep_ps_fetch_node_stat_v2 (wsrep_t*            gh,
+                                 wsrep_node_stat_t** nodes,
+                                 uint32_t*           size,
+                                 int32_t*            my_index,
+                                 uint32_t            max_version)
+{
+    assert(gh != 0);
+    assert(gh->ctx != 0);
+
+    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    return repl->fetch_pfs_stat(nodes, size, my_index, max_version);
+}
+
+extern "C"
+void wsrep_ps_free_node_stat (wsrep_t* gh,
+                              wsrep_node_stat_t* nodes)
+{
+    assert(gh != 0);
+    assert(gh->ctx != 0);
+
+    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    repl->free_pfs_stat(nodes);
 }

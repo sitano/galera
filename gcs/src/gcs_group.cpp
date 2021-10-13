@@ -2213,27 +2213,40 @@ gcs_group_get_membership(const gcs_group_t&        group,
     }
 }
 
-int gcs_group_fetch_pfs_info(const gcs_group_t* group,
-                             wsrep_node_info_t* entries,
-                             uint32_t*          size,
-                             uint32_t*          my_idx)
+int gcs_group_fetch_pfs_info(const gcs_group_t*  group,
+                             wsrep_node_info_t** nodes_arg,
+                             uint32_t*           size,
+                             int32_t*            my_index,
+                             uint32_t            max_version)
 {
     int num = (int) group->num;
-    if (*size < (uint32_t) num)
+    if (num <= 0)
     {
-        *size = 0;
-        *my_idx = -1;
+        return -ENOTCONN;
+    }
+
+    wsrep_node_info_t* entries = static_cast<wsrep_node_info_t*>(
+        gu_malloc(sizeof(wsrep_node_info_t) * num)
+    );
+    if (!entries)
+    {
+        gu_warn("Failed to allocate nodes information structure");
         return -ENOMEM;
     }
+
+    *nodes_arg = entries;
+    *size = num;
+    *my_index = (int) group->my_idx;
 
     int i;
     for (i = 0; i < num; i++)
     {
         const gcs_node_t& node(group->nodes[i]);
 
+        entries[i].wsrep_version = max_version;
         entries[i].wsrep_local_index = i;
 
-        strncpy(entries[i].wsrep_node_id, node.id, WSREP_UUID_STR_LEN);
+        memcpy(entries[i].wsrep_node_id, node.id, WSREP_UUID_STR_LEN);
         entries[i].wsrep_node_id[WSREP_UUID_STR_LEN] = 0;
 
         strncpy(entries[i].wsrep_host_name, node.name,
@@ -2268,19 +2281,32 @@ int gcs_group_fetch_pfs_info(const gcs_group_t* group,
         entries[i].wsrep_commit_window = 0;
     }
 
-    *size = i;
-    *my_idx = (int) group->my_idx;
-
     return 0;
 }
 
-int gcs_group_fetch_pfs_stat(const gcs_group_t* group,
-                             wsrep_node_stat_t* entry)
+int gcs_group_fetch_pfs_stat(const gcs_group_t*  group,
+                             wsrep_node_stat_t** nodes_arg,
+                             uint32_t*           size,
+                             int32_t*            my_index,
+                             uint32_t            max_version)
 {
+    int num = (int) group->num;
     int my_idx = (int) group->my_idx;
-    entry->wsrep_local_index = my_idx;
-    if (my_idx >= 0)
+    if (num > 0 && my_idx >= 0)
     {
+        wsrep_node_stat_t* entry = static_cast<wsrep_node_stat_t*>(
+            gu_malloc(sizeof(wsrep_node_stat_t))
+        );
+        if (!entry)
+        {
+            gu_warn("Failed to allocate node statistics structure");
+            return -ENOMEM;
+        }
+        *nodes_arg = entry;
+        *size = 1;
+        *my_index = 0;
+        entry->wsrep_version = max_version;
+        entry->wsrep_local_index = my_idx;
         const gcs_node_t& node(group->nodes[my_idx]);
         strncpy(entry->wsrep_node_id, node.id, WSREP_UUID_STR_LEN);
         entry->wsrep_node_id[WSREP_UUID_STR_LEN] = 0;

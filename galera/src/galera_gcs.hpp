@@ -65,10 +65,14 @@ namespace galera
         virtual int     get_status(gu::Status&) const = 0;
         virtual void    get_membership(wsrep_allocator_cb        alloc,
                                        struct wsrep_membership** memb) const =0;
-        virtual int     fetch_pfs_info(wsrep_node_info_t* entries,
+        virtual int     fetch_pfs_info(wsrep_node_info_t** nodes,
                                        uint32_t* size,
-                                       uint32_t* my_idx) = 0;
-        virtual int     fetch_pfs_stat(wsrep_node_stat_t* node) = 0;
+                                       int32_t* my_index,
+                                       uint32_t max_version) = 0;
+        virtual int     fetch_pfs_stat(wsrep_node_stat_t** nodes,
+                                       uint32_t* size,
+                                       int32_t* my_index,
+                                       uint32_t max_version) = 0;
 
         /*! @throws NotFound */
         virtual void    param_set (const std::string& key,
@@ -246,16 +250,22 @@ namespace galera
             return gcs_get_status(conn_, status);
         }
 
-        int fetch_pfs_info(wsrep_node_info_t* entries,
+        int fetch_pfs_info(wsrep_node_info_t** nodes,
                            uint32_t* size,
-                           uint32_t* my_idx)
+                           int32_t* my_index,
+                           uint32_t max_version)
         {
-            return gcs_fetch_pfs_info(conn_, entries, size, my_idx);
+            return gcs_fetch_pfs_info(conn_, nodes, size, my_index,
+                                      max_version);
         }
 
-        int fetch_pfs_stat(wsrep_node_stat_t* node)
+        int fetch_pfs_stat(wsrep_node_stat_t** nodes,
+                           uint32_t* size,
+                           int32_t* my_index,
+                           uint32_t max_version)
         {
-            return gcs_fetch_pfs_stat(conn_, node);
+            return gcs_fetch_pfs_stat(conn_, nodes, size, my_index,
+                                      max_version);
         }
 
         void get_membership(wsrep_allocator_cb alloc,
@@ -441,18 +451,20 @@ namespace galera
             return 0;
         }
 
-        int fetch_pfs_info(wsrep_node_info_t* entries,
+        int fetch_pfs_info(wsrep_node_info_t** nodes,
                            uint32_t* size,
-                           uint32_t* my_idx)
+                           int32_t* my_index,
+                           uint32_t max_version)
         {
-            *size = 0;
-            *my_idx = -1;
-            return 0;
+            return -ENOTCONN;
         }
 
-        int fetch_pfs_stat(wsrep_node_stat_t* node)
+        int fetch_pfs_stat(wsrep_node_stat_t** nodes,
+                           uint32_t* size,
+                           int32_t* my_index,
+                           uint32_t max_version)
         {
-            return 0;
+            return -ENOTCONN;
         }
 
         void get_membership(wsrep_allocator_cb        alloc,

@@ -129,9 +129,17 @@ namespace galera
         // static void stats_free(struct wsrep_stats_var*) must be declared in
         // the child class
 
-        virtual wsrep_status_t fetch_pfs_info(wsrep_node_info_t* nodes,
-                                    uint32_t* size) = 0;
-        virtual wsrep_status_t fetch_pfs_stat(wsrep_node_stat_t* node) = 0;
+        virtual wsrep_status_t fetch_pfs_info(wsrep_node_info_t** nodes,
+                                              uint32_t* size,
+                                              int32_t* my_index,
+                                              uint32_t max_version) = 0;
+        virtual wsrep_status_t fetch_pfs_stat(wsrep_node_stat_t** nodes,
+                                              uint32_t* size,
+                                              int32_t* my_index,
+                                              uint32_t max_version) = 0;
+
+        virtual void free_pfs_info(wsrep_node_info_t* nodes) = 0;
+        virtual void free_pfs_stat(wsrep_node_stat_t* nodes) = 0;
 
         /*! @throws NotFound */
         virtual void        param_set (const std::string& key,

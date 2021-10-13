@@ -308,13 +308,17 @@ gcs_group_get_membership(const gcs_group_t& group,
                          struct wsrep_membership** memb);
 
 extern int
-gcs_group_fetch_pfs_info(const gcs_group_t* group,
-                         wsrep_node_info_t* entries,
-                         uint32_t*          size,
-                         uint32_t*          my_idx);
+gcs_group_fetch_pfs_info(const gcs_group_t*  group,
+                         wsrep_node_info_t** nodes,
+                         uint32_t*           size,
+                         int32_t*            my_index,
+                         uint32_t            max_version);
 
 extern int
-gcs_group_fetch_pfs_stat(const gcs_group_t* group,
-                         wsrep_node_stat_t* node);
+gcs_group_fetch_pfs_stat(const gcs_group_t*  group,
+                         wsrep_node_stat_t** nodes,
+                         uint32_t*           size,
+                         int32_t*            my_index,
+                         uint32_t            max_version);
 
 #endif /* _gcs_group_h_ */

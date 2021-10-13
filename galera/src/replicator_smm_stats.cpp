@@ -381,12 +381,20 @@ galera::ReplicatorSMM::stats_free(struct wsrep_stats_var* arg)
 }
 
 wsrep_status_t
-galera::ReplicatorSMM::fetch_pfs_info(wsrep_node_info_t* nodes, uint32_t* size)
+galera::ReplicatorSMM::fetch_pfs_info(wsrep_node_info_t** nodes_arg,
+                                      uint32_t*           size,
+                                      int32_t*            my_index,
+                                      uint32_t            max_version)
 {
-    uint32_t index;
-    int rc = gcs_.fetch_pfs_info(nodes, size, &index);
+    if (max_version < WSREP_PS_MIN_API_VERSION)
+    {
+        return WSREP_NOT_IMPLEMENTED;
+    }
+    int rc = gcs_.fetch_pfs_info(nodes_arg, size, my_index, max_version);
     if (rc == 0)
     {
+        int index = *my_index;
+        wsrep_node_info_t* nodes = *nodes_arg;
         /* Sequence number of the last committed transaction: */
         wsrep_gtid last_committed;
         (void)last_committed_id(&last_committed);
@@ -410,19 +418,26 @@ galera::ReplicatorSMM::fetch_pfs_info(wsrep_node_info_t* nodes, uint32_t* size)
         double out_of_order_entered;
         double out_of_order_left;
         double out_of_order_window;
-	long long waits;
+        long long out_of_order_waits;
         apply_monitor_.get_stats(&out_of_order_entered,
                                  &out_of_order_left,
                                  &out_of_order_window,
-                                 &waits);
+                                 &out_of_order_waits);
         nodes[index].wsrep_apply_window = out_of_order_window;
         /* Average distance between the highest and lowest concurrently
            commited seqno: */
         commit_monitor_.get_stats(&out_of_order_entered,
                                   &out_of_order_left,
                                   &out_of_order_window,
-                                  &waits);
+                                  &out_of_order_waits);
         nodes[index].wsrep_commit_window = out_of_order_window;
+        return WSREP_OK;
+    }
+    else if (rc == -ENOTCONN)
+    {
+        *nodes_arg = NULL;
+        *size = 0;
+        *my_index = -1;
         return WSREP_OK;
     }
     else
@@ -431,12 +446,28 @@ galera::ReplicatorSMM::fetch_pfs_info(wsrep_node_info_t* nodes, uint32_t* size)
     }
 }
 
-wsrep_status_t
-galera::ReplicatorSMM::fetch_pfs_stat(wsrep_node_stat_t* node)
+void galera::ReplicatorSMM::free_pfs_info(wsrep_node_info_t* nodes)
 {
-    int rc = gcs_.fetch_pfs_stat(node);
+    if (nodes)
+    {
+        gu_free(nodes);
+    }
+}
+
+wsrep_status_t
+galera::ReplicatorSMM::fetch_pfs_stat(wsrep_node_stat_t** nodes_arg,
+                                      uint32_t*           size,
+                                      int32_t*            my_index,
+                                      uint32_t            max_version)
+{
+    if (max_version < WSREP_PS_MIN_API_VERSION)
+    {
+        return WSREP_NOT_IMPLEMENTED;
+    }
+    int rc = gcs_.fetch_pfs_stat(nodes_arg, size, my_index, max_version);
     if (rc == 0)
     {
+        wsrep_node_stat_t* node = *nodes_arg + *my_index;
         /* Total number of keys replicated: */
         node->wsrep_repl_keys = keys_count_();
         /* Total size of keys replicated: */
@@ -489,8 +520,23 @@ galera::ReplicatorSMM::fetch_pfs_stat(wsrep_node_stat_t* node)
         node->wsrep_evs_repl_latency = 0;
         return WSREP_OK;
     }
+    else if (rc == -ENOTCONN)
+    {
+        *nodes_arg = NULL;
+        *size = 0;
+        *my_index = -1;
+        return WSREP_OK;
+    }
     else
     {
         return WSREP_NODE_FAIL;
+    }
+}
+
+void galera::ReplicatorSMM::free_pfs_stat(wsrep_node_stat_t* nodes)
+{
+    if (nodes)
+    {
+        gu_free(nodes);
     }
 }

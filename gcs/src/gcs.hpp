@@ -509,9 +509,16 @@ void gcs_get_membership(const gcs_conn_t* conn,
                         wsrep_allocator_cb alloc,
                         struct wsrep_membership** memb);
 
-int gcs_fetch_pfs_info (gcs_conn_t* conn, wsrep_node_info_t* entries,
-                        uint32_t* size, uint32_t* my_idx);
-int gcs_fetch_pfs_stat (gcs_conn_t* conn, wsrep_node_stat_t* node);
+int gcs_fetch_pfs_info (gcs_conn_t*         conn,
+                        wsrep_node_info_t** nodes,
+                        uint32_t*           size,
+                        int32_t*            my_index,
+                        uint32_t            max_version);
+int gcs_fetch_pfs_stat (gcs_conn_t*         conn,
+                        wsrep_node_stat_t** nodes,
+                        uint32_t*           size,
+                        int32_t*            my_index,
+                        uint32_t            max_version);
 
 /*! A node with this name will be treated as a stateless arbitrator */
 #define GCS_ARBITRATOR_NAME "garb"
