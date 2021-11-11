@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2010 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 #ifndef GALERA_FSM_HPP
@@ -7,6 +7,8 @@
 
 #include "gu_unordered.hpp"
 #include "gu_throw.hpp"
+#include "gu_logger.hpp"
+
 #include <list>
 #include <vector>
 

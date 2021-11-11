@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2010-2017 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 #ifndef GALERA_REPLICATOR_HPP
@@ -52,6 +52,7 @@ namespace galera
 
         Replicator() { }
         virtual ~Replicator() { }
+        virtual wsrep_status_t enc_set_key(const wsrep_enc_key_t&) = 0;
         virtual wsrep_status_t connect(const std::string& cluster_name,
                                        const std::string& cluster_url,
                                        const std::string& state_donor,
@@ -109,7 +110,8 @@ namespace galera
         virtual void process_commit_cut(wsrep_seqno_t seq,
                                         wsrep_seqno_t seqno_l) = 0;
         virtual void process_conf_change(void*                    recv_ctx,
-                                         const struct gcs_action& cc) = 0;
+                                         const gcs_act_cchange&   cc,
+                                         const struct gcs_action& act) = 0;
         virtual void process_state_req(void* recv_ctx, const void* req,
                                        size_t req_size,
                                        wsrep_seqno_t seqno_l,
@@ -146,6 +148,10 @@ namespace galera
         virtual void cancel_seqnos(wsrep_seqno_t seqno_l,
                                    wsrep_seqno_t seqno_g) = 0;
         virtual bool corrupt() const = 0;
+
+        virtual wsrep_status_t get_membership(wsrep_allocator_cb        alloc,
+                                              struct wsrep_membership** memb)
+            const = 0;
 
         static void register_params(gu::Config&);
 

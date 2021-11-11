@@ -11,14 +11,14 @@
 #ifndef _gcs_group_h_
 #define _gcs_group_h_
 
-#include <stdbool.h>
-
 #include "gcs_gcache.hpp"
 #include "gcs_node.hpp"
 #include "gcs_recv_msg.hpp"
 #include "gcs_seqno.hpp"
 #include "gcs_state_msg.hpp"
 #include "gu_unordered.hpp"
+#include "gu_mutex.hpp"
+#include "gu_thread_keys.hpp"
 
 #include "gu_config.hpp"
 
@@ -28,6 +28,9 @@ extern uint8_t gcs_group_conf_to_vote_policy(gu::Config& cnf);
 
 #include "gu_status.hpp"
 #include "gu_utils.hpp"
+
+#include <wsrep_membership_service.h>
+#include <stdbool.h>
 
 typedef enum gcs_group_state
 {
@@ -48,6 +51,11 @@ struct VoteResult { gcs_seqno_t seqno; int64_t res; };
 
 typedef struct gcs_group
 {
+    mutable
+    gu::Mutex     memb_mtx_;    // syncs updates by the recv thread and reads
+                                // by gcs_group_get_membership()
+    gcs_seqno_t   memb_epoch_;
+
     gcache_t*     cache;
     gu::Config*   cnf;
     gcs_seqno_t   act_id_;      // current(last) action seqno
@@ -85,7 +93,12 @@ typedef struct gcs_group
     gcs_state_quorum_t quorum;
     int last_applied_proto_ver;
 
-    gcs_group() : gcs_proto_ver(0), repl_proto_ver(0), appl_proto_ver(0) { }
+    gcs_group() :
+        memb_mtx_(gu::get_mutex_key(gu::GU_MUTEX_KEY_GCS_MEMBERSHIP)),
+        gcs_proto_ver(0),
+        repl_proto_ver(0),
+        appl_proto_ver(0)
+    { }
 }
 gcs_group_t;
 
@@ -185,6 +198,7 @@ gcs_group_handle_act_msg (gcs_group_t*          const group,
     assert (sender_idx < group->num);
     assert (frg->act_id > 0);
     assert (frg->act_size > 0);
+    assert (gcs_act_in_cache(frg->act_type));
 
     // clear reset flag if set by own first fragment after reset flag was set
     group->frag_reset = (group->frag_reset &&
@@ -285,5 +299,10 @@ gcs_group_param_set(gcs_group_t& group,
 
 extern void
 gcs_group_get_status(const gcs_group_t* group, gu::Status& status);
+
+extern void
+gcs_group_get_membership(const gcs_group_t& group,
+                         wsrep_allocator_cb alloc,
+                         struct wsrep_membership** memb);
 
 #endif /* _gcs_group_h_ */

@@ -60,6 +60,8 @@ target_compile_options(gcs_tests
 target_link_libraries(gcs_tests
   gcache
   ${GALERA_UNIT_TEST_LIBS}
+  ${Boost_FILESYSTEM_LIBRARIES}
+  ${Boost_SYSTEM_LIBRARIES}
   )
 
 add_test(

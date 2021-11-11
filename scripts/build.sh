@@ -5,7 +5,7 @@ set -eu
 # $Id$
 
 # Galera library version
-VERSION="26.4.9"
+VERSION="26.4.10"
 
 get_cores()
 {
@@ -85,6 +85,7 @@ else
 fi
 
 EXTRA_SYSROOT=${EXTRA_SYSROOT:-""}
+export CK_TIMEOUT_MULTIPLIER=5
 
 if [ "$OS" == "Darwin" ]; then
   if which -s port && test -x /opt/local/bin/port; then

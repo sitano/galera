@@ -53,7 +53,7 @@ namespace galera
             wsrep_seqno_t      last()  const { return last_;   }
             wsrep_seqno_t      preload_start() const { return preload_start_; }
             AsyncSenderMap&    asmap()  { return asmap_;  }
-            gu_thread_t          thread() { return thread_; }
+            gu_thread_t        thread() { return thread_; }
 
         private:
 
@@ -98,8 +98,8 @@ galera::ist::Receiver::Receiver(gu::Config&           conf,
     recv_bind_    (),
     io_service_   (conf),
     acceptor_     (),
-    mutex_        (),
-    cond_         (),
+    mutex_        (gu::get_mutex_key(gu::GU_MUTEX_KEY_IST_RECEIVER)),
+    cond_         (gu::get_cond_key(gu::GU_COND_KEY_IST_RECEIVER)),
     first_seqno_  (WSREP_SEQNO_UNDEFINED),
     last_seqno_   (WSREP_SEQNO_UNDEFINED),
     current_seqno_(WSREP_SEQNO_UNDEFINED),
@@ -156,7 +156,8 @@ extern "C" void* run_receiver_thread(void* arg)
     return 0;
 }
 
-static void IST_fix_addr_scheme(const gu::Config& conf, std::string& addr)
+static void IST_fix_addr_scheme(const gu::Config& conf, std::string& addr,
+                                bool tls_service_enabled)
 {
     /* check if explicit scheme is present */
     if (addr.find("://") == std::string::npos)
@@ -170,13 +171,20 @@ static void IST_fix_addr_scheme(const gu::Config& conf, std::string& addr)
             {
                 dynamic_socket = conf.get<bool>(gu::conf::socket_dynamic, false);
             }
-            if (ssl_key.length() != 0 && not dynamic_socket)
+            if ((ssl_key.length() != 0 || tls_service_enabled) &&
+                not dynamic_socket)
             {
                 addr.insert(0, "ssl://");
                 return;
             }
         }
         catch (gu::NotSet&) {}
+#else
+        if (tls_service_enabled)
+        {
+            addr.insert(0, "ssl://");
+            return;
+        }
 #endif // GALERA_HAVE_SSL
         addr.insert(0, "tcp://");
     }
@@ -209,7 +217,8 @@ static void IST_fix_addr_port(const gu::Config& conf, const gu::URI& uri,
     }
 }
 
-std::string galera::IST_determine_recv_addr (gu::Config& conf)
+std::string galera::IST_determine_recv_addr (gu::Config& conf,
+                                             bool tls_service_enabled)
 {
     std::string recv_addr;
 
@@ -232,7 +241,7 @@ std::string galera::IST_determine_recv_addr (gu::Config& conf)
         }
     }
 
-    IST_fix_addr_scheme(conf, recv_addr);
+    IST_fix_addr_scheme(conf, recv_addr, tls_service_enabled);
     gu::URI ra_uri(recv_addr);
 
     if (!conf.has(galera::BASE_HOST_KEY))
@@ -244,13 +253,14 @@ std::string galera::IST_determine_recv_addr (gu::Config& conf)
     return recv_addr;
 }
 
-std::string galera::IST_determine_recv_bind(gu::Config& conf)
+std::string galera::IST_determine_recv_bind(gu::Config& conf,
+                                            bool tls_service_enabled)
 {
     std::string recv_bind;
 
     recv_bind = conf.get(galera::ist::Receiver::RECV_BIND);
 
-    IST_fix_addr_scheme(conf, recv_bind);
+    IST_fix_addr_scheme(conf, recv_bind, tls_service_enabled);
 
     gu::URI rb_uri(recv_bind);
 
@@ -269,10 +279,12 @@ galera::ist::Receiver::prepare(wsrep_seqno_t const first_seqno,
     ready_ = false;
     version_ = version;
     source_id_ = source_id;
-    recv_addr_ = IST_determine_recv_addr(conf_);
+    recv_addr_ = IST_determine_recv_addr(
+        conf_, io_service_.tls_service() != nullptr);
     try
     {
-        recv_bind_ = IST_determine_recv_bind(conf_);
+        recv_bind_ = IST_determine_recv_bind(
+            conf_, io_service_.tls_service() != nullptr);
     }
     catch (gu::NotSet&)
     {
@@ -320,7 +332,9 @@ galera::ist::Receiver::prepare(wsrep_seqno_t const first_seqno,
     last_seqno_    = last_seqno;
 
     int err;
-    if ((err = gu_thread_create(&thread_, 0, &run_receiver_thread, this)) != 0)
+    if ((err = gu_thread_create(
+             gu::get_thread_key(gu::GU_THREAD_KEY_IST),
+             &thread_, &run_receiver_thread, this)) != 0)
     {
         recv_addr_ = "";
         gu_throw_error(err) << "Unable to create receiver thread";
@@ -446,7 +460,8 @@ void galera::ist::Receiver::run()
                                       TrxHandleSlaveDeleter()));
                 if (act.size > 0)
                 {
-                    gu_trace(ts->unserialize<false>(act));
+                    gu_trace(ts->unserialize<false>(gcache_, act));
+                    gcache_.drop_plaintext(act.buf); // see Proto::recv_ordered()
                     ts->set_local(false);
                     assert(ts->global_seqno() == act.seqno_g);
                     assert(ts->depends_seqno() >= 0 || ts->nbo_end());
@@ -464,11 +479,16 @@ void galera::ist::Receiver::run()
                 break;
             }
             case GCS_ACT_CCHANGE:
+            {
                 //log_info << "####### Passing IST CC " << act.seqno_g
                 //         << ", must_apply: " << must_apply
                 //         << ", preload: " << preload;
-                handler_.ist_cc(act, must_apply, preload);
+                gcs_act_cchange const cc
+                    (gcache_.get_ro_plaintext(act.buf), act.size);
+                gcache_.drop_plaintext(act.buf); // see Proto::recv_ordered()
+                handler_.ist_cc(cc, act, must_apply, preload);
                 break;
+            }
             default:
                 assert(0);
             }
@@ -650,54 +670,62 @@ void galera::ist::Sender::send(wsrep_seqno_t first, wsrep_seqno_t last,
                 << "IST handshake failed, peer reported error: " << ctrl;
         }
 
-        // send eof even if the set or transactions sent would be empty
-        if (first > last || (first == 0 && last == 0))
+        if (!(first > last || (first == 0 && last == 0)))
         {
-            log_info << "IST sender notifying joiner, not sending anything";
-            send_eof(p, *socket_);
-            return;
+            log_info << "IST sender " << first << " -> " << last;
+
+            std::vector<gcache::GCache::Buffer> buf_vec(
+                std::min(static_cast<size_t>(last - first + 1),
+                         static_cast<size_t>(1024)));
+            ssize_t n_read;
+            while ((n_read = gcache_.seqno_get_buffers(buf_vec, first)) > 0)
+            {
+                GU_DBUG_SYNC_WAIT("ist_sender_send_after_get_buffers");
+                //log_info << "read " << first << " + " << n_read
+                //         << " from gcache";
+                for (wsrep_seqno_t i(0); i < n_read; ++i)
+                {
+                    // Preload start is the seqno of the lowest trx in
+                    // cert index at CC. If the cert index was completely
+                    // reset, preload_start will be zero and no preload flag
+                    // should be set.
+                    bool preload_flag(preload_start > 0 &&
+                                      buf_vec[i].seqno_g() >= preload_start);
+                    //log_info << "Sender::send(): seqno " <<buf_vec[i].seqno_g()
+                    //         << ", size " << buf_vec[i].size() << ", preload: "
+                    //         << preload_flag;
+                    p.send_ordered(*socket_, buf_vec[i], preload_flag);
+
+                    if (buf_vec[i].seqno_g() == last) break;
+                }
+                first += n_read;
+
+                if (first > last) break;
+
+                // resize buf_vec to avoid scanning gcache past last
+                size_t next_size(std::min(static_cast<size_t>(last - first + 1),
+                                          static_cast<size_t>(1024)));
+                if (buf_vec.size() != next_size)
+                {
+                    buf_vec.resize(next_size);
+                }
+            }
+            assert(n_read >= 0);
+
+            if (first != last + 1)
+            {
+                log_warn << "Could not find all writests ["
+                         << first << ", " << last
+                         << "] from cache. IST sending can't continue.";
+                assert(first <= last);
+            }
         }
         else
         {
-            log_info << "IST sender " << first << " -> " << last;
+            log_info << "IST sender notifying joiner, not sending anything";
         }
 
-        std::vector<gcache::GCache::Buffer> buf_vec(
-            std::min(static_cast<size_t>(last - first + 1),
-                     static_cast<size_t>(1024)));
-        ssize_t n_read;
-        while ((n_read = gcache_.seqno_get_buffers(buf_vec, first)) > 0)
-        {
-            GU_DBUG_SYNC_WAIT("ist_sender_send_after_get_buffers");
-            //log_info << "read " << first << " + " << n_read << " from gcache";
-            for (wsrep_seqno_t i(0); i < n_read; ++i)
-            {
-                // Preload start is the seqno of the lowest trx in
-                // cert index at CC. If the cert index was completely
-                // reset, preload_start will be zero and no preload flag
-                // should be set.
-                bool preload_flag(preload_start > 0 &&
-                                  buf_vec[i].seqno_g() >= preload_start);
-                //log_info << "Sender::send(): seqno " << buf_vec[i].seqno_g()
-                //         << ", size " << buf_vec[i].size() << ", preload: "
-                //         << preload_flag;
-                p.send_ordered(*socket_, buf_vec[i], preload_flag);
-
-                if (buf_vec[i].seqno_g() == last)
-                {
-                    send_eof(p, *socket_);
-                    return;
-                }
-            }
-            first += n_read;
-            // resize buf_vec to avoid scanning gcache past last
-            size_t next_size(std::min(static_cast<size_t>(last - first + 1),
-                                      static_cast<size_t>(1024)));
-            if (buf_vec.size() != next_size)
-            {
-                buf_vec.resize(next_size);
-            }
-        }
+        send_eof(p, *socket_);
     }
     catch (const gu::Exception& e)
     {
@@ -706,8 +734,6 @@ void galera::ist::Sender::send(wsrep_seqno_t first, wsrep_seqno_t last,
                                       << "'";
     }
 }
-
-
 
 
 extern "C"
@@ -765,7 +791,8 @@ void galera::ist::AsyncSenderMap::run(const gu::Config&   conf,
     gu::Critical crit(monitor_);
     AsyncSender* as(new AsyncSender(conf, peer, first, last, preload_start,
                                     *this, version));
-    int err(gu_thread_create(&as->thread_, 0, &run_async_sender, as));
+    int err(gu_thread_create(gu::get_thread_key(gu::GU_THREAD_KEY_ASYNC_SENDER),
+                             &as->thread_, &run_async_sender, as));
     if (err != 0)
     {
         delete as;

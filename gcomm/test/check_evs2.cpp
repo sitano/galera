@@ -2643,6 +2643,7 @@ Suite* evs2_suite()
     tc = tcase_create("test_input_map_gap_range_list");
     tcase_add_test(tc, test_input_map_gap_range_list);
     suite_add_tcase(s, tc);
+
     tc = tcase_create("test_proto_single_join");
     tcase_add_test(tc, test_proto_single_join);
     suite_add_tcase(s, tc);

@@ -49,6 +49,8 @@
 #include <fstream>
 #include <mutex>
 
+static wsrep_tls_service_v1_t* gu_tls_service(0);
+
 //
 // AsioIpAddress wrapper
 //
@@ -207,17 +209,26 @@ gu::AsioErrorCode::AsioErrorCode()
     : value_()
     , category_(&gu_asio_system_category)
     , error_extra_()
+    , wsrep_category_()
+    , tls_stream_()
 { }
 
 gu::AsioErrorCode::AsioErrorCode(int err)
     : value_(err)
     , category_(&gu_asio_system_category)
     , error_extra_()
+    , wsrep_category_()
+    , tls_stream_()
 { }
 
 std::string gu::AsioErrorCode::message() const
 {
-    if (category_)
+    if (wsrep_category_ && gu_tls_service)
+    {
+        return gu_tls_service->error_message_get(
+            gu_tls_service->context, tls_stream_, value_, wsrep_category_);
+    }
+    else if (category_)
     {
         std::string ret(
             asio::error_code(value_, category_->native()).message());
@@ -633,6 +644,7 @@ bool gu::is_verbose_error(const gu::AsioErrorCode& ec)
 gu::AsioIoService::AsioIoService(const gu::Config& conf)
     : impl_(std::unique_ptr<Impl>(new Impl))
     , conf_(conf)
+    , tls_service_(gu_tls_service)
     , signal_connection_()
     , dynamic_socket_(false)
 {
@@ -809,4 +821,32 @@ void gu::AsioSteadyTimer::async_wait(
 void gu::AsioSteadyTimer::cancel()
 {
     impl_->native().cancel();
+}
+
+//
+// TLS service hooks.
+//
+
+static std::mutex gu_tls_service_init_mutex;
+static size_t gu_tls_service_usage;
+
+int gu::init_tls_service_v1(wsrep_tls_service_v1_t* tls_service)
+{
+    std::lock_guard<std::mutex> lock(gu_tls_service_init_mutex);
+    ++gu_tls_service_usage;
+    if (gu_tls_service)
+    {
+        assert(gu_tls_service == tls_service);
+        return 0;
+    }
+    gu_tls_service = tls_service;
+    return 0;
+}
+
+void gu::deinit_tls_service_v1()
+{
+    std::lock_guard<std::mutex> lock(gu_tls_service_init_mutex);
+    assert(gu_tls_service_usage > 0);
+    --gu_tls_service_usage;
+    if (gu_tls_service_usage == 0) gu_tls_service = 0;
 }

@@ -1,17 +1,17 @@
 //
-// Copyright (C) 2010-2018 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 
 #ifndef GALERA_TRX_HANDLE_HPP
 #define GALERA_TRX_HANDLE_HPP
 
-#include "write_set.hpp"
-#include "mapped_buffer.hpp"
 #include "fsm.hpp"
 #include "key_data.hpp" // for append_key()
 #include "key_entry_os.hpp"
 #include "write_set_ng.hpp"
+
+#include "GCache.hpp"
 
 #include "wsrep_api.h"
 #include "gu_mutex.hpp"
@@ -32,6 +32,7 @@ namespace galera
 {
 
     class NBOCtx; // forward decl
+    class ReplicatorSMM;
 
     static std::string const working_dir = "/tmp";
 
@@ -417,14 +418,21 @@ namespace galera
             return flags;
         }
 
-        template <bool from_group>
-        size_t unserialize(const gcs_action& act)
+        template <bool from_group, bool decrypt = true>
+        size_t unserialize(gcache::GCache& gcache, const gcs_action& act)
         {
             assert(GCS_ACT_WRITESET == act.type);
 
             try
             {
-                version_ = WriteSetNG::version(act.buf, act.size);
+                void* ptr(const_cast<void*>(act.buf));
+                void* plaintext(decrypt ?
+                                gcache.get_rw_plaintext(ptr) : ptr);
+                /* plaintext resource will be released on GCache::free() later
+                 * in trx lifecycle. In the meantime it will be updated with
+                 * global seqno and certification verdict. */
+
+                version_ = WriteSetNG::version(plaintext, act.size);
                 action_  = std::make_pair(act.buf, act.size);
 
                 switch (version_)
@@ -432,7 +440,7 @@ namespace galera
                 case WriteSetNG::VER3:
                 case WriteSetNG::VER4:
                 case WriteSetNG::VER5:
-                    write_set_.read_buf (act.buf, act.size);
+                    write_set_.read_buf(plaintext, act.size);
                     assert(version_ == write_set_.version());
                     write_set_flags_ = fixup_write_set_flags(
                         version_,
@@ -705,6 +713,9 @@ namespace galera
 #ifndef NDEBUG
             ,explicit_rollback_(false)
 #endif /* NDEBUG */
+            , local_order_cond_(gu::get_cond_key(gu::GU_COND_KEY_LOCAL_MONITOR))
+            , apply_order_cond_(gu::get_cond_key(gu::GU_COND_KEY_APPLY_MONITOR))
+            , commit_order_cond_(gu::get_cond_key(gu::GU_COND_KEY_COMMIT_MONITOR))
         {}
 
         friend class TrxHandleMaster;
@@ -732,6 +743,15 @@ namespace galera
         bool                   explicit_rollback_;
 #endif /* NDEBUG */
 
+        // Condition variable for each monitor. Ideally this should be
+        // only one, but we may want to get more specific statistics about
+        // waits per each monitor.
+        friend class ReplicatorSMM;
+        mutable gu::Cond               local_order_cond_;
+        mutable gu::Cond               apply_order_cond_;
+        mutable gu::Cond               commit_order_cond_;
+
+    private:
         TrxHandleSlave(const TrxHandleSlave&);
         void operator=(const TrxHandleSlave& other);
 
@@ -1058,7 +1078,7 @@ namespace galera
                         size_t              reserved_size)
             :
             TrxHandle(&trans_map_, source_id, conn_id, trx_id, params.version_),
-            mutex_             (),
+            mutex_             (gu::get_mutex_key(gu::GU_MUTEX_KEY_TRX_HANDLE)),
             mem_pool_          (mp),
             params_            (params),
             ts_                (),

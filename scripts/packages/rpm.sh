@@ -16,6 +16,7 @@ RPM_TOP_DIR=$SCRIPT_ROOT/rpm_top_dir
 rm -rf $RPM_TOP_DIR
 mkdir -p $RPM_TOP_DIR/RPMS
 ln -s ../../../ $RPM_TOP_DIR/BUILD
+export CK_TIMEOUT_MULTIPLIER=5
 
 fast_cflags="-O3 -fno-omit-frame-pointer"
 uname -m | grep -q i686 && \

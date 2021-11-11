@@ -5,6 +5,7 @@
 #ifndef __GCACHE_H__
 #define __GCACHE_H__
 
+#include "gcache_seqno.hpp"
 #include "gcache_mem_store.hpp"
 #include "gcache_rb_store.hpp"
 #include "gcache_page_store.hpp"
@@ -14,6 +15,8 @@
 #include <gu_lock.hpp> // for gu::Mutex and gu::Cond
 #include <gu_config.hpp>
 #include <gu_gtid.hpp>
+
+#include <wsrep_api.h> // encryption declarations
 
 #include <string>
 #include <iostream>
@@ -39,7 +42,10 @@ namespace gcache
          * Creates a new gcache file in "gcache.name" conf parameter or
          * in data_dir. If file already exists, it gets overwritten.
          */
-        GCache (gu::Config& cfg, const std::string& data_dir);
+        GCache (gu::Config&        cfg,
+                const std::string& data_dir,
+                wsrep_encrypt_cb_t encrypt_cb = NULL,
+                void*              app_ctx    = NULL);
 
         virtual ~GCache();
 
@@ -49,11 +55,59 @@ namespace gcache
         /* Resets storage */
         void  reset();
 
-        /* Memory allocation functions */
+        /* Sets encryption key */
+        void set_enc_key(const wsrep_enc_key_t& key);
+
+        /*!
+         * Memory allocation methods
+         *
+         * malloc() and realloc() allocate space in the cache and return
+         * pointers to it. That return value identifies the allocated resource
+         * and should be used as an argument to free() to release it, similar
+         * to standard libc malloc(), realloc() and free().
+         * If cache is encrypted, a corresponding "shadow" plaintext buffer
+         * pointer is passed in the ptx argument, otherwise contents of ptx is
+         * identical to the return value.
+         * In other words, the return value should be used to identify cache
+         * resource, whereas the value passed in ptx should be used to read/
+         * write to it.
+         * Wherever the following methods below take void* as an argument,
+         * it is meant to be a return value of malloc()/realloc(), NOT ptx.
+         */
         typedef MemOps::ssize_type ssize_type;
-        void* malloc  (ssize_type size);
+        void* malloc  (ssize_type size, void*& ptx);
+        void* realloc (void* ptr, ssize_type size, void*& ptx);
         void  free    (void* ptr);
-        void* realloc (void* ptr, ssize_type size);
+
+        /*!
+         * Retrieve plaintext buffer by pointer to ciphertext.
+         * Repeated calls shall return the same pointer, i.e. there is only one
+         * plaintext buffer per ciphertext.
+         * The plaintext pointer shall be valid at least until drop_plaintext()
+         * or free() is called. Subsequent call to get_plaintext() is not
+         * guranteed to return the same pointer.
+         */
+        inline const void* get_ro_plaintext(const void* cphr)
+        {
+            return get_plaintext(cphr, false);
+        }
+        inline void* get_rw_plaintext(void* cphr)
+        {
+            return get_plaintext(cphr, true);
+        }
+
+        /*!
+         * Allow to drop the plaintext buffer identified by ciphertext pointer
+         * from cache
+         */
+        inline void  drop_plaintext(const void* cphr)
+        {
+            if (encrypt_cache)
+            {
+                gu::Lock lock(mtx);
+                ps.drop_plaintext(cphr);
+            }
+        }
 
         /* Seqno related functions */
 
@@ -181,13 +235,16 @@ namespace gcache
         /*! @throws NotFound */
         void param_set (const std::string& key, const std::string& val);
 
+        /* prints out buffer metadata */
+        std::string meta(const void* ptr);
+
         static size_t const PREAMBLE_LEN;
 
     private:
 
         typedef MemOps::size_type size_type;
 
-        void free_common (BufferHeader*);
+        void free_common (BufferHeader*, const void*);
 
         gu::Config&     config;
 
@@ -206,12 +263,14 @@ namespace gcache
             size_t rb_size()             const { return rb_size_;         }
             size_t page_size()           const { return page_size_;       }
             size_t keep_pages_size()     const { return keep_pages_size_; }
+            size_t keep_plaintext_size() const { return keep_plaintext_size_;}
             int    debug()               const { return debug_;           }
             bool   recover()             const { return recover_;         }
 
             void mem_size        (size_t s) { mem_size_        = s; }
             void page_size       (size_t s) { page_size_       = s; }
             void keep_pages_size (size_t s) { keep_pages_size_ = s; }
+            void keep_plaintext_size (size_t s) { keep_plaintext_size_ = s; }
 #ifndef NDEBUG
             void debug           (int    d) { debug_           = d; }
 #endif
@@ -224,6 +283,7 @@ namespace gcache
             size_t      const rb_size_;
             size_t            page_size_;
             size_t            keep_pages_size_;
+            size_t            keep_plaintext_size_;
             int               debug_;
             bool        const recover_;
         }
@@ -248,14 +308,41 @@ namespace gcache
         seqno_t         seqno_locked;
         int             seqno_locked_count;
 
+        bool const      encrypt_cache;
+
 #ifndef NDEBUG
         std::set<const void*> buf_tracker;
 #endif
 
-        void discard_buffer (BufferHeader* bh);
+        template <typename T> /* T assumes void* or const void* */
+        T get_plaintext(T const cphr, bool const writable)
+        {
+            if (encrypt_cache)
+            {
+                gu::Lock lock(mtx);
+                return ps.get_plaintext(cphr, writable);
+            }
+            else
+                return (cphr);
+        }
+
+        /* change == true will mark plaintext as changed */
+        BufferHeader* get_BH(const void* ptr, bool change = false)
+        {
+            return encrypt_cache ? ps.get_BH(ptr, change) : ptr2BH(ptr);
+        }
+
+        void discard_buffer (BufferHeader* bh, const void* ptr);
+
+        /* discard buffers while condition.check() is true */
+        template <typename T>
+        bool discard (T& condition);
 
         /* returns true when successfully discards all seqnos up to s */
         bool discard_seqno (seqno_t s);
+
+        /* returns true when successfully discards at least size of buffers */
+        bool discard_size (size_t size);
 
         /* discards all seqnos greater than s */
         void discard_tail (seqno_t s);

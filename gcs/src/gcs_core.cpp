@@ -23,6 +23,7 @@
 #include <gu_logger.hpp>
 #include <gu_serialize.hpp>
 #include <gu_debug_sync.hpp>
+#include <gu_thread_keys.hpp>
 
 #include <string.h> // for mempcpy
 #include <errno.h>
@@ -141,15 +142,16 @@ gcs_core_create (gu_config_t* const conf,
                 core->fifo = gcs_fifo_lite_create (CORE_FIFO_LEN,
                                                    sizeof (core_act_t));
                 if (core->fifo) {
-                    gu_mutex_init  (&core->send_lock, NULL);
+                    gu_mutex_init(
+                        gu::get_mutex_key(gu::GU_MUTEX_KEY_GCS_CORE_SEND),
+                        &core->send_lock);
                     core->proto_ver = -1;
                     // ^^^ shall be bumped in gcs_group_act_conf()
 
-                    gcs_group_init (&core->group,
-                                    reinterpret_cast<gu::Config*>(conf), cache,
-                                    node_name, inc_addr,
-                                    gcs_proto_ver, repl_proto_ver,appl_proto_ver
-                        );
+                    gcs_group_init(&core->group,
+                                   reinterpret_cast<gu::Config *>(conf), cache,
+                                   node_name, inc_addr, gcs_proto_ver,
+                                   repl_proto_ver, appl_proto_ver);
 
                     core->state = CORE_CLOSED;
                     core->send_act_no = 1; // 0 == no actions sent
@@ -328,6 +330,8 @@ gcs_core_send (gcs_core_t*          const conn,
 
     assert (action != NULL);
     assert (act_size > 0);
+    /* actions passing this way will be put in cache */
+    assert (gcs_act_in_cache(act_type));
 
     /*
      * Action header will be replicated with every message.
@@ -1523,8 +1527,8 @@ gcs_core_caused (gcs_core_t* core, gu::GTID& gtid)
     gu_cond_t    cond;
     causal_act_t act = {&act_id, &act_uuid, &error, &mtx, &cond};
 
-    gu_mutex_init (&mtx, NULL);
-    gu_cond_init  (&cond, NULL);
+    gu_mutex_init (gu::get_mutex_key(gu::GU_MUTEX_KEY_GCS_CORE_CAUSED), &mtx);
+    gu_cond_init  (gu::get_cond_key(gu::GU_COND_KEY_GCS_CORE_CAUSED), &cond);
     gu_mutex_lock (&mtx);
     {
         long ret = core_msg_send_retry (core,
@@ -1589,6 +1593,13 @@ void gcs_core_get_status(gcs_core_t* core, gu::Status& status)
     gu_mutex_unlock(&core->send_lock);
 }
 
+void gcs_core_get_membership(const gcs_core_t* const   core,
+                             wsrep_allocator_cb const  alloc,
+                             struct wsrep_membership** memb)
+{
+    gcs_group_get_membership(core->group, alloc, memb);
+}
+
 #ifdef GCS_CORE_TESTING
 
 gcs_backend_t*
@@ -1625,6 +1636,12 @@ gcs_fifo_lite_t*
 gcs_core_get_fifo (gcs_core_t* core)
 {
     return core->fifo;
+}
+
+gcache_t*
+gcs_core_get_gcache(gcs_core_t* core)
+{
+    return core->cache;
 }
 
 #endif /* GCS_CORE_TESTING */

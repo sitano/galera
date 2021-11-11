@@ -148,14 +148,14 @@ namespace gcache
     BufferHeader*
     RingBuffer::get_new_buffer (size_type const size)
     {
-        assert((size % MemOps::ALIGNMENT) == 0);
         assert_size_free();
 
         BH_assert_clear(BH_cast(next_));
 
         uint8_t* ret(next_);
 
-        size_type const size_next(size + sizeof(BufferHeader));
+        size_type const alloc_size(aligned_size(size));
+        size_type const size_next(alloc_size + sizeof(BufferHeader));
 
         Limits::assert_size(size_next);
 
@@ -165,7 +165,7 @@ namespace gcache
             size_t const end_size(end_ - ret);
 
             if (end_size >= size_next) {
-                assert(size_free_ >= size);
+                assert(size_free_ >= alloc_size);
                 goto found_space;
             }
             else {
@@ -177,7 +177,10 @@ namespace gcache
 
         assert (ret <= first_);
 
-        if (size_t(first_ - ret) >= size_next) { assert(size_free_ >= size); }
+        if (size_t(first_ - ret) >= size_next)
+        {
+            assert(size_free_ >= alloc_size);
+        }
 
         while (size_t(first_ - ret) < size_next) {
             // try to discard first buffer to get more space
@@ -197,7 +200,7 @@ namespace gcache
             /* buffer is either discarded already, or it must have seqno */
             assert (SEQNO_ILL == bh->seqno_g);
 
-            first_ += bh->size;
+            first_ += BH_offset(bh);
             assert_size_free();
 
             if (gu_unlikely(0 == (BH_cast(first_))->size))
@@ -211,7 +214,7 @@ namespace gcache
 
                 if (size_t(end_ - ret) >= size_next)
                 {
-                    assert(size_free_ >= size);
+                    assert(size_free_ >= alloc_size);
                     size_trail_ = 0;
                     goto found_space;
                 }
@@ -231,21 +234,21 @@ namespace gcache
         if (size_t(first_ - ret) < size_next) {
             log_fatal << "Assertion ((first - ret) >= size_next) failed: "
                       << std::endl
-                      << "first offt = " << (first_ - start_) << std::endl
-                      << "next  offt = " << (next_  - start_) << std::endl
-                      << "end   offt = " << (end_   - start_) << std::endl
-                      << "ret   offt = " << (ret    - start_) << std::endl
-                      << "size_next  = " << size_next         << std::endl;
+                      << "first offt = " << (first_ - start_) << '\n'
+                      << "next  offt = " << (next_  - start_) << '\n'
+                      << "end   offt = " << (end_   - start_) << '\n'
+                      << "ret   offt = " << (ret    - start_) << '\n'
+                      << "size_next  = " << size_next         << '\n';
             abort();
         }
 #endif
 
     found_space:
         assert((uintptr_t(ret) % MemOps::ALIGNMENT) == 0);
-        size_used_ += size;
+        size_used_ += alloc_size;
         assert (size_used_ <= size_cache_);
-        assert (size_free_ >= size);
-        size_free_ -= size;
+        assert (size_free_ >= alloc_size);
+        size_free_ -= alloc_size;
 
         BufferHeader* const bh(BH_cast(ret));
         bh->size    = size;
@@ -253,7 +256,7 @@ namespace gcache
         bh->flags   = 0;
         bh->store   = BUFFER_IN_RB;
         bh->ctx     = reinterpret_cast<BH_ctx_t>(this);
-        next_ = ret + size;
+        next_ = ret + alloc_size;
         assert((uintptr_t(next_) % MemOps::ALIGNMENT) == 0);
         assert (next_ + sizeof(BufferHeader) <= end_);
         BH_clear (BH_cast(next_));
@@ -291,8 +294,8 @@ namespace gcache
     {
         assert(BH_is_released(bh));
 
-        assert(size_used_ >= bh->size);
-        size_used_ -= bh->size;
+        assert(size_used_ >= aligned_size(bh->size));
+        size_used_ -= aligned_size(bh->size);
 
         if (SEQNO_NONE == bh->seqno_g)
         {
@@ -309,11 +312,14 @@ namespace gcache
         assert_sizes();
         assert (NULL != ptr);
         assert (size > 0);
+
+        size_type const new_size(aligned_size(size));
         // We can reliably allocate continuous buffer which is twice as small
         // as total cache area. So compare to half the space
-        if (size > (size_cache_ / 2)) return 0;
+        if (new_size > (size_cache_ / 2)) return 0;
 
         BufferHeader* const bh(ptr2BH(ptr));
+        size_type const bh_offset(BH_offset(bh));
 
 //        reallocs_++;
 
@@ -321,8 +327,10 @@ namespace gcache
         // adjacent buffer
         {
             Limits::assert_size(bh->size);
-            diff_type const adj_size(size - bh->size);
+            diff_type const adj_size(new_size - bh_offset);
             if (adj_size <= 0) return ptr;
+
+            assert(adj_size % MemOps::ALIGNMENT == 0);
 
             uint8_t* const adj_ptr(reinterpret_cast<uint8_t*>(BH_next(bh)));
             if (adj_ptr == next_)
@@ -334,8 +342,8 @@ namespace gcache
 
                 if (adj_ptr == adj_buf)
                 {
-                    bh->size = next_ - static_cast<uint8_t*>(ptr) +
-                        sizeof(BufferHeader);
+                    assert(size <= bh_offset + adj_size);
+                    bh->size = size;
                     return ptr;
                 }
                 else // adjacent buffer allocation failed, return it back
@@ -423,7 +431,7 @@ namespace gcache
 
         if (!bh) return; /* no seqno'd buffers in RB */
 
-        assert(bh->size > 0);
+        assert(bh->size >= sizeof(BufferHeader));
         assert(BH_is_released(bh));
 
         /* Seek the first unreleased buffer.
@@ -460,7 +468,7 @@ namespace gcache
             return;
         }
 
-        assert ((BH_cast(first_))->size > 0);
+        assert ((BH_cast(first_))->size >= sizeof(BufferHeader));
         assert (first_ != next_);
         assert ((BH_cast(first_))->seqno_g == SEQNO_NONE);
         assert (!BH_is_released(BH_cast(first_)));
@@ -486,6 +494,7 @@ namespace gcache
         {
             if (gu_likely (bh->size > 0))
             {
+                assert(bh->size >= sizeof(BufferHeader));
                 total++;
 
                 if (bh->seqno_g != SEQNO_NONE)
@@ -705,11 +714,12 @@ namespace gcache
 
             ptr = segment_start;
             bh = BH_cast(ptr);
+            size_type bh_offset(BH_offset(bh));
 
 #define GCACHE_SCAN_BUFFER_TEST                                 \
             (BH_test(bh) && bh->size > 0 &&                     \
-             ptr + bh->size <= segment_end &&                   \
-             BH_test(BH_cast(ptr + bh->size)))
+             ptr + bh_offset <= segment_end &&                  \
+             BH_test(BH_cast(ptr + bh_offset)))
 
             while (GCACHE_SCAN_BUFFER_TEST)
             {
@@ -814,9 +824,10 @@ namespace gcache
                     }
                 }
 
-                progress.update(bh->size);
-                ptr += bh->size;
+                progress.update(bh_offset);
+                ptr += bh_offset;
                 bh = BH_cast(ptr);
+                bh_offset = BH_offset(bh);
             }
 
             if (!BH_is_clear(bh))
@@ -874,7 +885,8 @@ namespace gcache
             else if (offset == 0 && segment_start == start_)
             {
                 /* single segment case */
-                assert(1 == segment_scans);
+                assert(1 == segment_scans ||
+                       segment_start + sizeof(BufferHeader) > segment_end);
                 first_ = segment_start;
                 next_ = ptr;
                 break;
@@ -984,15 +996,16 @@ namespace gcache
             /* trim first_: start with the current first_ and scan forward to
              * the first non-empty buffer. */
             BufferHeader* bh(BH_cast(first_));
-            assert(bh->size > sizeof(BufferHeader));
             while (bh->seqno_g == SEQNO_ILL)
             {
-                assert(bh->size > sizeof(BufferHeader));
+                assert(bh->size >= sizeof(BufferHeader));
 
                 bh = BH_next(bh);
 
-                if (gu_unlikely(0 == bh->size)) bh = BH_cast(start_); // rollover
+                if (gu_unlikely(0 == bh->size)) // rollover
+                    bh = BH_cast(start_);
             }
+            assert(bh->size >= sizeof(BufferHeader));
             first_ = reinterpret_cast<uint8_t*>(bh);
 
             /* trim next_: start with the last seqno and scan forward up to the
@@ -1003,7 +1016,7 @@ namespace gcache
             {
                 if (gu_likely(bh->size) > 0)
                 {
-                    assert(bh->size > sizeof(BufferHeader));
+                    assert(bh->size >= sizeof(BufferHeader));
 
                     if (bh->seqno_g > 0) last_bh = bh;
 
@@ -1015,7 +1028,7 @@ namespace gcache
                 }
             }
             next_ = reinterpret_cast<uint8_t*>(BH_next(last_bh));
-
+#if 0 //remove
             /* Even if previous buffers were not aligned, make sure from
              * now on they are - adjust next_ pointer and last buffer size */
             if (uintptr_t(next_) % MemOps::ALIGNMENT)
@@ -1029,6 +1042,7 @@ namespace gcache
                 next_ = n;
                 assert(BH_next(last_bh) == BH_cast(next_));
             }
+#endif
             assert((uintptr_t(next_) % MemOps::ALIGNMENT) == 0);
             BH_clear(BH_cast(next_));
 
@@ -1051,6 +1065,8 @@ namespace gcache
             bh = BH_cast(first_);
             while (bh != BH_cast(next_))
             {
+                progress.update(aligned_size(bh->size));
+
                 if (gu_likely(bh->size > 0))
                 {
                     total++;
@@ -1067,7 +1083,7 @@ namespace gcache
                         locked++;
                         empty_buffer(bh);
                         discard(bh);
-                        size_used_ -= bh->size;
+                        size_used_ -= aligned_size(bh->size);
                         // size_free_ is taken care of in discard()
                     }
 
@@ -1077,8 +1093,6 @@ namespace gcache
                 {
                      bh = BH_cast(start_); // rollover
                 }
-
-                progress.update(bh->size);
             }
 
             progress.finish();

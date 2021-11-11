@@ -1,4 +1,4 @@
-/* Copyright (C) 2010-2017 Codership Oy <info@codersip.com> */
+/* Copyright (C) 2010-2020 Codership Oy <info@codersip.com> */
 
 #include "replicator_smm.hpp"
 

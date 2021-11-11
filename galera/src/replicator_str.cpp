@@ -220,7 +220,6 @@ StateRequest_v1::StateRequest_v1 (const void* str, ssize_t str_len)
 {
     if (sst_offset() + 2*sizeof(uint32_t) > size_t(len_))
     {
-        assert(0);
         gu_throw_error (EINVAL) << "State transfer request is too short: "
                                 << len_ << ", must be at least: "
                                 << (sst_offset() + 2*sizeof(uint32_t));
@@ -228,7 +227,6 @@ StateRequest_v1::StateRequest_v1 (const void* str, ssize_t str_len)
 
     if (strncmp (req_, MAGIC.c_str(), MAGIC.length()))
     {
-        assert(0);
         gu_throw_error (EINVAL) << "Wrong magic signature in state request v1.";
     }
 
@@ -362,6 +360,44 @@ ReplicatorSMM::donate_sst(void* const         recv_ctx,
     return ret;
 }
 
+struct slg
+{
+    gcache::GCache& gcache_;
+    bool            unlock_;
+
+    slg(gcache::GCache& cache) : gcache_(cache), unlock_(false){}
+    ~slg() { if (unlock_) gcache_.seqno_unlock(); }
+};
+
+static wsrep_seqno_t run_ist_senders(ist::AsyncSenderMap& ist_senders,
+                                     const gu::Config&    config,
+                                     const std::string&   peer,
+                                     wsrep_seqno_t const  preload_start,
+                                     wsrep_seqno_t const  cc_seqno,
+                                     wsrep_seqno_t const  cc_lowest,
+                                     int const            proto_ver,
+                                     slg&                 seqno_lock_guard,
+                                     wsrep_seqno_t const  rcode)
+{
+    try
+    {
+        ist_senders.run(config,
+                        peer,
+                        preload_start,
+                        cc_seqno,
+                        cc_lowest,
+                        proto_ver);
+        // seqno will be unlocked when sender exists
+        seqno_lock_guard.unlock_ = false;
+        return rcode;
+    }
+    catch (gu::Exception& e)
+    {
+        log_warn << "IST failed: " << e.what();
+        return -e.get_errno();
+    }
+}
+
 void ReplicatorSMM::process_state_req(void*       recv_ctx,
                                       const void* req,
                                       size_t      req_size,
@@ -372,7 +408,8 @@ void ReplicatorSMM::process_state_req(void*       recv_ctx,
     assert(seqno_l > -1);
     assert(req != 0);
 
-    StateRequest* const streq(read_state_request(req, req_size));
+    StateRequest* const streq(read_state_request(
+                                  gcache_.get_ro_plaintext(req), req_size));
     // Guess correct STR protocol version. Here we assume that the
     // replicator protocol version didn't change between sending
     // and receiving STR message. Unfortunately the protocol version
@@ -408,15 +445,7 @@ void ReplicatorSMM::process_state_req(void*       recv_ctx,
 
     if (not skip_sst)
     {
-        struct sgl
-        {
-            gcache::GCache& gcache_;
-            bool            unlock_;
-
-            sgl(gcache::GCache& cache) : gcache_(cache), unlock_(false){}
-            ~sgl() { if (unlock_) gcache_.seqno_unlock(); }
-        }
-        seqno_lock_guard(gcache_);
+        slg seqno_lock_guard(gcache_);
 
         if (streq->ist_len())
         {
@@ -450,7 +479,7 @@ void ReplicatorSMM::process_state_req(void*       recv_ctx,
                     wsrep_gtid_t const state_id =
                         { istr.uuid(), istr.last_applied() };
 
-                    rcode = donate_sst(recv_ctx, *streq, state_id, true);
+                    gu_trace(rcode = donate_sst(recv_ctx, *streq, state_id, true));
 
                     // we will join in sst_sent.
                     join_now = false;
@@ -458,26 +487,19 @@ void ReplicatorSMM::process_state_req(void*       recv_ctx,
 
                 if (rcode >= 0)
                 {
-                    try
-                    {
-                        ist_senders_.run(config_,
-                                         istr.peer(),
-                                         first,
-                                         cc_seqno_,
-                                         cc_lowest_trx_seqno_,
-                                         /* Historically IST messages versioned
-                                          * with the global replicator protocol.
-                                          * Need to keep it that way for backward
-                                          * compatibility */
-                                         protocol_version_);
-                        // seqno will be unlocked when sender exists
-                        seqno_lock_guard.unlock_ = false;
-                    }
-                    catch (gu::Exception& e)
-                    {
-                        log_error << "IST failed: " << e.what();
-                        rcode = -e.get_errno();
-                    }
+                    rcode = run_ist_senders(ist_senders_,
+                                            config_,
+                                            istr.peer(),
+                                            first,
+                                            cc_seqno_,
+                                            cc_lowest_trx_seqno_,
+                        /* Historically IST messages are versioned
+                         * with the global replicator protocol.
+                         * Need to keep it that way for backward
+                         * compatibility */
+                                            protocol_version_,
+                                            seqno_lock_guard,
+                                            rcode);
                 }
                 else
                 {
@@ -553,18 +575,20 @@ void ReplicatorSMM::process_state_req(void*       recv_ctx,
                     IST_request istr;
                     get_ist_request(streq, &istr);
                     // Send trxs to rebuild cert index.
-                    ist_senders_.run(config_,
-                                     istr.peer(),
-                                     preload_start,
-                                     cc_seqno_,
-                                     preload_start,
-                                     /* Historically IST messages are versioned
-                                      * with the global replicator protocol.
-                                      * Need to keep it that way for backward
-                                      * compatibility */
-                                     protocol_version_);
-                    // seqno will be unlocked when sender exists
-                    seqno_lock_guard.unlock_ = false;
+                    rcode = run_ist_senders(ist_senders_,
+                                            config_,
+                                            istr.peer(),
+                                            preload_start,
+                                            cc_seqno_,
+                                            preload_start,
+                        /* Historically IST messages are versioned
+                         * with the global replicator protocol.
+                         * Need to keep it that way for backward
+                         * compatibility */
+                                            protocol_version_,
+                                            seqno_lock_guard,
+                                            rcode);
+                    if (rcode < 0) goto out;
                 }
                 else /* streq->version() == 0 */
                 {
@@ -1417,13 +1441,13 @@ void galera::ReplicatorSMM::process_ist_conf_change(const gcs_act_cchange& conf)
     ist_event_queue_.push_back(view_info);
 }
 
-void ReplicatorSMM::ist_cc(const gcs_action& act, bool must_apply,
-                           bool preload)
+void ReplicatorSMM::ist_cc(const gcs_act_cchange& conf,
+                           const gcs_action&      act,
+                           bool const             must_apply,
+                           bool const             preload)
 {
     assert(GCS_ACT_CCHANGE == act.type);
     assert(act.seqno_g > 0);
-
-    gcs_act_cchange const conf(act.buf, act.size);
 
     assert(conf.conf_id >= 0); // Primary configuration
     assert(conf.seqno == act.seqno_g);

@@ -76,7 +76,6 @@ Commandline Options:
     ssl=[0|1]           build without/with SSL enabled
     static_ssl=path     a path to static SSL libraries
     extra_sysroot=path  a path to extra development environment (Fink, Homebrew, MacPorts, MinGW)
-    version=X.X.X       galera version
     bits=[32bit|64bit]
     gcov=[True|False]   compile Galera for code coverage reporting
     install=path        install files under path
@@ -171,16 +170,13 @@ static_ssl = ARGUMENTS.get('static_ssl', None)
 install = ARGUMENTS.get('install', None)
 version_script = int(ARGUMENTS.get('version_script', 1))
 
-GALERA_VER = ARGUMENTS.get('version', '4.9')
+GALERA_VER = ARGUMENTS.get('version', '4.10')
 GALERA_REV = ARGUMENTS.get('revno', 'XXXX')
 
 # Attempt to read from file if not given
 if GALERA_REV == "XXXX" and os.path.isfile("GALERA_REVISION"):
-    f = open("GALERA_REVISION", "r")
-    try:
+    with open("GALERA_REVISION", "r") as f:
         GALERA_REV = f.readline().rstrip("\n")
-    finally:
-        f.close()
 
 # export to any module that might have use of those
 Export('GALERA_VER', 'GALERA_REV')
@@ -242,7 +238,7 @@ if sysname == 'freebsd' or sysname == 'sunos':
     env.Append(LIBPATH = ['/usr/local/lib'])
     env.Append(CPPPATH = ['/usr/local/include'])
 if sysname == 'sunos':
-    env.Replace(SHLINKFLAGS = '-shared ')
+   env.Replace(SHLINKFLAGS = '-shared ')
 
 # Add paths is extra_sysroot argument was specified
 extra_sysroot = ARGUMENTS.get('extra_sysroot', '')
@@ -418,6 +414,16 @@ int main() { SSL_CTX* ctx=NULL; EC_KEY* ecdh=NULL; return !SSL_CTX_set_tmp_ecdh(
     context.Result(result)
     return result
 
+def CheckStdSeedSeq(context):
+    test_source = """
+#include <random>
+int main() { std::seed_seq seeds{1, 2}; }
+"""
+    context.Message('Checking for std::seed_seq ...')
+    result = context.TryLink(test_source, '.cpp')
+    context.Result(result)
+    return result
+
 def CheckVersionScript(context):
     test_source = """
 int main() { return 0; }
@@ -439,7 +445,8 @@ conf = Configure(env, custom_tests = {
     'CheckTr1UnorderedMap': CheckTr1UnorderedMap,
     'CheckWeffcpp': CheckWeffcpp,
     'CheckSetEcdhAuto': CheckSetEcdhAuto,
-    'CheckSetTmpEcdh': CheckSetTmpEcdh
+    'CheckSetTmpEcdh': CheckSetTmpEcdh,
+    'CheckStdSeedSeq': CheckStdSeedSeq
 })
 
 conf.env.Append(CPPPATH = [ '#/wsrep/src' ])
@@ -564,7 +571,11 @@ if boost == 1:
     conf.env.Append(CPPFLAGS = ' -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG=1')
 
     # Common procedure to find boost static library
-    boost_libpaths = [ boost_library_path, '/usr/local/lib', '/usr/local/lib64', '/usr/lib', '/usr/lib64' ]
+    if bits == 64:
+        boost_libpaths = [ boost_library_path, '/usr/lib64', '/usr/local/lib64' ]
+    else:
+        boost_libpaths = [ boost_library_path, '/usr/local/lib', '/usr/lib' ]
+
     def check_boost_library(libBaseName, header, configuredLibPath, autoadd = 1):
         libName = libBaseName + boost_library_suffix
         if configuredLibPath != '' and not os.path.isfile(configuredLibPath):
@@ -681,6 +692,10 @@ if have_ssl:
     # Enable SSL compilation
     conf.env.Append(CPPFLAGS = ' -DGALERA_HAVE_SSL=1')
 
+# STD library support
+if conf.CheckStdSeedSeq():
+    conf.env.Append(CPPFLAGS = ' -DHAVE_STD_SEED_SEQ')
+
 # these will be used only with our software
 if strict_build_flags == 1:
     conf.env.Append(CCFLAGS = ' -Werror ')
@@ -764,6 +779,22 @@ if sysname != 'darwin':
     if not conf.CheckLib('rt'):
         print('Error: realtime library not found or not usable')
         Exit(1)
+
+if not conf.CheckCXXHeader('boost/filesystem.hpp'):
+    print('Error: boost/filesystem.hpp file not found or not usable')
+    Exit(1)
+
+if not conf.CheckLib('boost_system',
+                     language = 'CXX',
+                     autoadd = 0):
+    print('Error: boost_system library not found or not usable')
+    Exit(1)
+
+if not conf.CheckLib('boost_filesystem',
+                     language = 'CXX',
+                     autoadd = 0):
+    print('Error: boost_filesystem library not found or not usable')
+    Exit(1)
 
 conf.Finish()
 

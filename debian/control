@@ -10,6 +10,7 @@ Build-Depends: check,
                debhelper (>= 10),
                libasio-dev,
                libboost-dev (>= 1.41),
+               libboost-filesystem-dev (>= 1.41),
                libboost-program-options-dev (>= 1.41),
                libssl-dev
 Homepage: https://www.galeracluster.com/
@@ -33,8 +34,7 @@ Conflicts: galera-3,
            percona-xtradb-cluster-galera-3.x,
            percona-xtradb-cluster-galera-4.x,
            percona-xtradb-cluster-garbd-2.x,
-           percona-xtradb-cluster-garbd-3.x,
-           percona-xtradb-cluster-garbd-4.x
+           percona-xtradb-cluster-garbd-3.x
 Breaks: galera
 Replaces: galera
 Provides: galera,

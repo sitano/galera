@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2011-2017 Codership Oy <info@codership.com>
+// Copyright (C) 2011-2019 Codership Oy <info@codership.com>
 //
 
 
@@ -37,8 +37,8 @@ namespace galera
             virtual void ist_trx(const TrxHandleSlavePtr&, bool must_apply,
                                  bool preload) = 0;
             // Process conf change from IST
-            virtual void ist_cc(const gcs_action&, bool must_apply,
-                                bool preload) = 0;
+            virtual void ist_cc(const gcs_act_cchange&,const gcs_action&,
+                                bool must_apply, bool preload) = 0;
             // Report IST end
             virtual void ist_end(int error) = 0;
         protected:
@@ -144,7 +144,8 @@ namespace galera
             AsyncSenderMap(gcache::GCache& gcache)
                 :
                 senders_(),
-                monitor_(),
+                monitor_(gu::get_mutex_key(gu::GU_MUTEX_KEY_IST_ASYNC_SENDER),
+                         gu::get_cond_key(gu::GU_COND_KEY_IST_ASYNC_SENDER)),
                 gcache_(gcache)
             { }
 
@@ -170,8 +171,10 @@ namespace galera
 
     // Helpers to determine receive addr and receive bind. Public for
     // testing.
-    std::string IST_determine_recv_addr(gu::Config& conf);
-    std::string IST_determine_recv_bind(gu::Config& conf);
+    std::string IST_determine_recv_addr(gu::Config& conf,
+                                        bool tls_service_enabled);
+    std::string IST_determine_recv_bind(gu::Config& conf,
+                                        bool tls_service_enabled);
 
 } // namespace galera
 

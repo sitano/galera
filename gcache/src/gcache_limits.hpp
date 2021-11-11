@@ -23,7 +23,7 @@ namespace gcache
 
         static size_type const MAX_SIZE = sizeof(BufferHeader) + SSIZE_MAX_;
 
-        static size_type const MIN_SIZE = sizeof(BufferHeader) + 1;
+        static size_type const MIN_SIZE = sizeof(BufferHeader) + 0;
 
         static inline void assert_size(unsigned long long s)
         {
@@ -50,7 +50,10 @@ namespace gcache
 
         static diff_type const DIFF_MIN = -DIFF_MAX - 1;
 
-        GU_COMPILE_ASSERT(DIFF_MIN <=diff_type(MIN_SIZE - MAX_SIZE), min_diff);
+        typedef long long long_long;
+
+        GU_COMPILE_ASSERT(DIFF_MIN < 0, diff_min);
+        GU_COMPILE_ASSERT(DIFF_MIN + MAX_SIZE <= MIN_SIZE, min_diff);
 
     }; /* class Limits */
 }

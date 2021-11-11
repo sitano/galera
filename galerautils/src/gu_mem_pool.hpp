@@ -15,6 +15,7 @@
 
 #include "gu_lock.hpp"
 #include "gu_macros.hpp"
+#include "gu_thread_keys.hpp"
 
 #include <assert.h>
 
@@ -42,7 +43,7 @@ namespace gu
               buf_size_ (buf_size),
               reserve_  (reserve)
         {
-            assert(buf_size >  0);
+            assert(buf_size_ >  0);
             assert(reserve   >= 0);
             pool_.reserve(reserve_);
         }
@@ -177,7 +178,8 @@ namespace gu
 
         explicit
         MemPool(int buf_size, int reserve = 0, const char* name = "")
-            : base_(buf_size, reserve, name), mtx_ () {}
+            : base_(buf_size, reserve, name),
+              mtx_ (gu::get_mutex_key(gu::GU_MUTEX_KEY_MEMPOOL)) {}
 
         ~MemPool() {}
 

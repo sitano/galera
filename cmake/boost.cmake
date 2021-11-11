@@ -4,7 +4,7 @@
 
 set(Boost_USE_MULTITHREAD ON)
 set(Boost_USE_STATIC_LIBS ${GALERA_STATIC})
-find_package(Boost 1.41 COMPONENTS program_options)
+find_package(Boost 1.41 COMPONENTS filesystem program_options system)
 if (NOT Boost_FOUND)
   if (Boost_USE_STATIC_LIBS)
     message(ERROR

@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2010-2014 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 #ifndef GALERA_GCS_HPP
@@ -63,6 +63,8 @@ namespace galera
         virtual void    get_stats(gcs_stats*) const = 0;
         virtual void    flush_stats() = 0;
         virtual void    get_status(gu::Status&) const = 0;
+        virtual void    get_membership(wsrep_allocator_cb        alloc,
+                                       struct wsrep_membership** memb) const =0;
         /*! @throws NotFound */
         virtual void    param_set (const std::string& key,
                                    const std::string& value) = 0;
@@ -239,6 +241,12 @@ namespace galera
             gcs_get_status(conn_, status);
         }
 
+        void get_membership(wsrep_allocator_cb alloc,
+                            struct wsrep_membership** memb) const
+        {
+            gcs_get_membership(conn_, alloc, memb);
+        }
+
         void param_set (const std::string& key, const std::string& value)
         {
             long ret = gcs_param_set (conn_, key.c_str(), value.c_str());
@@ -309,16 +317,17 @@ namespace galera
             if (gu_likely(0 != gcache_ && ret > 0))
             {
                 assert (ret == act.size);
-                gu::byte_t* ptr(
-                    reinterpret_cast<gu::byte_t*>(gcache_->malloc(act.size)));
-                act.buf = ptr;
+                void* ptx;
+                act.buf = gcache_->malloc(act.size, ptx);
                 ssize_t copied(0);
                 for (int i(0); copied < act.size; ++i)
                 {
-                    memcpy (ptr + copied, actv[i].ptr, actv[i].size);
+                    ::memcpy(static_cast<gu::byte_t*>(ptx) + copied,
+                             actv[i].ptr, actv[i].size);
                     copied += actv[i].size;
                 }
                 assert (copied == act.size);
+                gcache_->drop_plaintext(act.buf);
             }
 
             return ret;
@@ -331,8 +340,10 @@ namespace galera
             if (gu_likely(0 != gcache_ && ret > 0))
             {
                 assert (ret == act.size);
-                void* const ptr(gcache_->malloc(act.size));
-                memcpy (ptr, act.buf, act.size);
+                void* ptx;
+                void* const ptr(gcache_->malloc(act.size, ptx));
+                memcpy (ptx, act.buf, act.size);
+                gcache_->drop_plaintext(ptr);
                 act.buf = ptr;
                 // no freeing here - initial act.buf belongs to the caller
             }
@@ -410,6 +421,12 @@ namespace galera
 
         void get_status(gu::Status& status) const
         {}
+
+        void get_membership(wsrep_allocator_cb        alloc,
+                            struct wsrep_membership** memb) const
+        {
+            *memb = 0;
+        }
 
         void param_set (const std::string& key, const std::string& value)
         {}

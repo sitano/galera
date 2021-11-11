@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2015 Codership Oy <info@codership.com>
+ * Copyright (C) 2008-2019 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -172,6 +172,10 @@ gcs_core_param_get (gcs_core_t* core, const char* key);
 
 void gcs_core_get_status(gcs_core_t* core, gu::Status& status);
 
+void gcs_core_get_membership(const gcs_core_t* core,
+                             wsrep_allocator_cb alloc,
+                             struct wsrep_membership** memb);
+
 #ifdef GCS_CORE_TESTING // things compiled only for unit tests
 
 /* gcs_core_send() interface does not allow enough concurrency control to model
@@ -203,6 +207,9 @@ gcs_core_get_group (const gcs_core_t* core);
 #include "gcs_fifo_lite.hpp"
 extern gcs_fifo_lite_t*
 gcs_core_get_fifo (gcs_core_t* core);
+
+extern gcache_t*
+gcs_core_get_gcache(gcs_core_t* core);
 
 #endif /* GCS_CORE_TESTING */
 

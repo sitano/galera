@@ -1,9 +1,12 @@
 //
-// Copyright (C) 2010-2017 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
 //
 
 #include "key_data.hpp"
 #include "gu_serialize.hpp"
+#include "gu_thread_keys.hpp"
+#include "gu_asio.hpp" // gu::init_tls_service_v1()
+#include "wsrep_membership_service.h"
 
 #if defined(GALERA_MULTIMASTER)
 #include "replicator_smm.hpp"
@@ -152,9 +155,28 @@ char* galera_parameters_get (wsrep_t* gh)
 }
 
 extern "C"
-wsrep_status_t galera_enc_set_key(wsrep_t* gh, const wsrep_enc_key_t*key)
+wsrep_status_t galera_enc_set_key(wsrep_t* gh, const wsrep_enc_key_t* key)
 {
-    return WSREP_NOT_IMPLEMENTED;
+    static wsrep_enc_key_t null_key = { NULL, 0 };
+
+    REPL_CLASS * repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    if (NULL == key) key = &null_key;
+
+    try
+    {
+        return repl->enc_set_key(*key);
+    }
+    catch(std::exception& e)
+    {
+        log_error << e.what();
+        return WSREP_NODE_FAIL;
+    }
+    catch(...)
+    {
+        log_fatal << "non-standard exception";
+        return WSREP_FATAL;
+    }
 }
 
 extern "C"
@@ -1634,4 +1656,61 @@ int wsrep_loader(wsrep_t *hptr)
     }
 
     return WSREP_OK;
+}
+
+extern "C"
+int wsrep_init_thread_service_v1(wsrep_thread_service_v1_t* ts)
+
+{
+    return gu::init_thread_service_v1(ts);
+}
+
+extern "C"
+void wsrep_deinit_thread_service_v1()
+{
+    gu::deinit_thread_service_v1();
+}
+
+extern "C"
+int wsrep_init_tls_service_v1(wsrep_tls_service_v1_t *tls_service)
+{
+    return gu::init_tls_service_v1(tls_service);
+}
+
+extern "C" void wsrep_deinit_tls_service_v1()
+{
+    gu::deinit_tls_service_v1();
+}
+
+static wsrep_status_t
+get_membership(wsrep_t* const            gh,
+               wsrep_allocator_cb const  alloc,
+               struct wsrep_membership** memb)
+{
+    assert(gh != 0);
+    assert(gh->ctx != 0);
+
+    REPL_CLASS * repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    try
+    {
+        return repl->get_membership(alloc, memb);
+    }
+    catch (std::exception& e)
+    {
+        log_error << e.what();
+        return WSREP_NODE_FAIL;
+    }
+}
+
+extern "C"
+wsrep_status_t wsrep_init_membership_service_v1(
+    struct wsrep_membership_service_v1 *membership_service)
+{
+    membership_service->get_membership = get_membership;
+    return WSREP_OK;
+}
+
+extern "C" void wsrep_deinit_membership_service_v1()
+{
 }

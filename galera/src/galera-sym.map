@@ -1,5 +1,11 @@
 {
     global: wsrep_loader;
             wsrep_interface_version;
+            wsrep_init_thread_service_v1;
+            wsrep_deinit_thread_service_v1;
+            wsrep_init_tls_service_v1;
+            wsrep_deinit_tls_service_v1;
+            wsrep_init_membership_service_v1;
+            wsrep_deinit_membership_service_v1;
     local:  *;
 };

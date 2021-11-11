@@ -14,6 +14,8 @@
 #include "gu_uri.hpp"
 #include "gu_signals.hpp"
 
+#include "wsrep_tls_service.h"
+
 #include <netinet/tcp.h> // tcp_info
 
 #include <array>
@@ -216,6 +218,8 @@ namespace gu
             : value_(value)
             , category_(&category)
             , error_extra_()
+            , wsrep_category_()
+            , tls_stream_()
         { }
 
         AsioErrorCode(int value, const AsioErrorCategory& category,
@@ -223,6 +227,17 @@ namespace gu
             : value_(value)
             , category_(&category)
             , error_extra_(error_extra)
+            , wsrep_category_()
+            , tls_stream_()
+        { }
+
+        AsioErrorCode(int value, const void* wsrep_category,
+                      const wsrep_tls_stream_t* tls_stream)
+            : value_(value)
+            , category_()
+            , error_extra_()
+            , wsrep_category_(wsrep_category)
+            , tls_stream_(tls_stream)
         { }
         /**
          * Return error number.
@@ -255,6 +270,8 @@ namespace gu
         const AsioErrorCategory* category_;
         // Extra category specific error information
         int error_extra_;
+        const void* wsrep_category_;
+        const wsrep_tls_stream_t* tls_stream_;
     };
 
     std::ostream& operator<<(std::ostream&, const AsioErrorCode&);
@@ -722,11 +739,17 @@ namespace gu
          */
         std::shared_ptr<AsioAcceptor> make_acceptor(const gu::URI& uri);
 
+        /**
+         * Return pointer to TLS service.
+         */
+        wsrep_tls_service_v1_t* tls_service() const { return tls_service_; }
+
         class Impl;
         Impl& impl();
     private:
         std::unique_ptr<Impl> impl_;
         const gu::Config& conf_;
+        wsrep_tls_service_v1_t* tls_service_;
         gu::Signals::signal_connection signal_connection_;
         bool dynamic_socket_;
     };
@@ -758,6 +781,10 @@ namespace gu
         class Impl;
         std::unique_ptr<Impl> impl_;
     };
+
+    /* Init/deinit global TLS service hooks. */
+    int init_tls_service_v1(wsrep_tls_service_v1_t*);
+    void deinit_tls_service_v1();
 }
 
 #endif // GU_ASIO_HPP

@@ -26,12 +26,14 @@ namespace gcs_test
         GcsGroup();
         GcsGroup(const std::string& node_id,
                  const std::string& inc_addr,
+                 bool enc,
                  gcs_proto_t gver = 1, int pver = 2, int aver = 3);
 
         ~GcsGroup();
 
-        void init(const char*  node_name,
-                  const char*  inc_addr,
+        void init(const std::string& node_name,
+                  const std::string& inc_addr,
+                  bool         enc,
                   gcs_proto_t  gcs_proto_ver,
                   int          repl_proto_ver,
                   int          appl_proto_ver);
@@ -50,11 +52,13 @@ namespace gcs_test
 
     private:
 
-        void common_ctor(const char* node_name, const char* inc_addr,
-                         gcs_proto_t gver, int rver, int aver);
+        void common_ctor(const std::string& node_name,
+                         const std::string& inc_addr,
+                         bool enc, gcs_proto_t gver, int rver, int aver);
 
         void common_dtor();
 
+        std::string        path_;
         gu::Config         conf_;
         InitConfig         init_;
         gcache::GCache*    gcache_;
@@ -68,7 +72,9 @@ struct gt_node
     gcs_test::GcsGroup group;
     char id[GCS_COMP_MEMB_ID_MAX_LEN + 1]; /// ID assigned by the backend
 
-    explicit gt_node(const char* name = NULL, int gcs_proto_ver = 0);
+    explicit gt_node(const char* name = NULL,
+                     int gcs_proto_ver = 0,
+                     bool enc = false);
     ~gt_node();
 
     gcs_node_state_t state() const { return group.node_state(); }
@@ -85,7 +91,10 @@ struct gt_group
     int             nodes_num;
     bool            primary;
 
-    explicit gt_group(int num = 0, int gcs_proto_ver = 0, bool prim = true);
+    explicit gt_group(int  num           = 0,
+                      int  gcs_proto_ver = 0,
+                      bool prim          = true,
+                      bool enc           = false);
     ~gt_group();
 
     /* deliver new component message to all memebers */
