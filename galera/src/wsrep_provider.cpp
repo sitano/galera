@@ -4,6 +4,7 @@
 
 #include "key_data.hpp"
 #include "gu_serialize.hpp"
+#include "gu_asio.hpp" // gu::init_tls_service_v1(), gu::init_allowlist_service_v1()
 #include "gu_thread_keys.hpp"
 #include "gu_asio.hpp" // gu::init_tls_service_v1()
 #include "wsrep_membership_service.h"
@@ -1716,4 +1717,15 @@ wsrep_status_t wsrep_init_membership_service_v1(
 
 extern "C" void wsrep_deinit_membership_service_v1()
 {
+}
+
+extern "C"
+int wsrep_init_allowlist_service_v1(wsrep_allowlist_service_v1_t *allowlist_service)
+{
+    return gu::init_allowlist_service_v1(allowlist_service);
+}
+
+extern "C" void wsrep_deinit_allowlist_service_v1()
+{
+    gu::deinit_allowlist_service_v1();
 }
