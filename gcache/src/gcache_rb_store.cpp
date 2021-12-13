@@ -1111,7 +1111,7 @@ namespace gcache
                             locked++;
                             empty_buffer(bh);
                             discard(bh);
-                            size_used_ -= bh->size;
+                            size_used_ -= aligned_size(bh->size);
                             // size_free_ is taken care of in discard()
                         }
 
@@ -1124,17 +1124,17 @@ namespace gcache
                 }
 
                 progress.finish();
+
+                /* No buffers on recovery should be in used state */
+                assert(0 == size_used_);
+
+                log_info << "GCache DEBUG: RingBuffer::recover(): found "
+                         << locked << '/' << total << " locked buffers";
+                log_info << "GCache DEBUG: RingBuffer::recover(): free space: "
+                         << size_free_ << '/' << size_cache_;
+
+                assert_sizes();
             }
-
-            /* No buffers on recovery should be in used state */
-            assert(0 == size_used_);
-
-            log_info << "GCache DEBUG: RingBuffer::recover(): found "
-                     << locked << '/' << total << " locked buffers";
-            log_info << "GCache DEBUG: RingBuffer::recover(): free space: "
-                     << size_free_ << '/' << size_cache_;
-
-            assert_sizes();
         }
         else
         {
