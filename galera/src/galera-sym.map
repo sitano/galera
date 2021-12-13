@@ -9,5 +9,7 @@
             wsrep_deinit_membership_service_v1;
             wsrep_init_allowlist_service_v1;
             wsrep_deinit_allowlist_service_v1;
+            wsrep_init_event_service_v1;
+            wsrep_deinit_event_service_v1;
     local:  *;
 };

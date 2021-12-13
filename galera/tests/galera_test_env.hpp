@@ -26,7 +26,10 @@ namespace
             conf_   (),
             path_   (test_name + "_test"),
             init_   (conf_, gcache_name_),
-            gcache_ (conf_, path_.name(),
+            gcache_pcb_
+            (galera::ProgressCallback<int64_t>(WSREP_MEMBER_UNDEFINED,
+                                               WSREP_MEMBER_UNDEFINED)),
+            gcache_ (&gcache_pcb_, conf_, path_.name(),
                      enc ? gcache_test_encrypt_cb : NULL, NULL),
             gcs_    (conf_, gcache_)
         {
@@ -90,6 +93,7 @@ namespace
             }
         }                                 init_;
 
+        galera::ProgressCallback<int64_t> gcache_pcb_;
         gcache::GCache                    gcache_;
         galera::DummyGcs                  gcs_;
     };

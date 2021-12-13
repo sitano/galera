@@ -38,13 +38,14 @@ defrag(bool const enc)
 
     if (enc)
     {
-        cache = new gcache::GCache(config, ".", gcache_test_encrypt_cb, NULL);
+        cache = new gcache::GCache(NULL, config, ".", gcache_test_encrypt_cb,
+                                   NULL);
         wsrep_enc_key_t const key = { cache, sizeof(*cache) };
         cache->set_enc_key(key);
     }
     else
     {
-        cache = new gcache::GCache(config, ".", NULL, NULL);
+        cache = new gcache::GCache(NULL, config, ".", NULL, NULL);
     }
 
     // The Action
