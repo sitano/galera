@@ -2212,7 +2212,6 @@ gcs_group_get_membership(const gcs_group_t&        group,
         }
     }
 }
-
 int gcs_group_fetch_pfs_info(const gcs_group_t*  group,
                              wsrep_node_info_t** nodes_arg,
                              uint32_t*           size,
@@ -2224,7 +2223,7 @@ int gcs_group_fetch_pfs_info(const gcs_group_t*  group,
     {
         return -ENOTCONN;
     }
-
+ 
     wsrep_node_info_t* entries = static_cast<wsrep_node_info_t*>(
         gu_malloc(sizeof(wsrep_node_info_t) * num)
     );

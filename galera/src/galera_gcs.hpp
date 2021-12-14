@@ -271,7 +271,7 @@ namespace galera
         void get_membership(wsrep_allocator_cb alloc,
                             struct wsrep_membership** memb) const
         {
-            gcs_get_membership(conn_, alloc, memb);
+	    gcs_get_membership(conn_, alloc, memb);
         }
 
         void param_set (const std::string& key, const std::string& value)
@@ -448,8 +448,8 @@ namespace galera
 
         int get_status(gu::Status& status) const
         {
-            return 0;
-        }
+	    return 0;
+	}
 
         int fetch_pfs_info(wsrep_node_info_t** nodes,
                            uint32_t* size,
@@ -470,7 +470,7 @@ namespace galera
         void get_membership(wsrep_allocator_cb        alloc,
                             struct wsrep_membership** memb) const
         {
-            *memb = 0;
+	    *memb = 0;
         }
 
         void param_set (const std::string& key, const std::string& value)

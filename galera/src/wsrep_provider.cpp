@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2010-2019 Codership Oy <info@codership.com>
+// Copyright (C) 2010-2021 Codership Oy <info@codership.com>
 //
 
 #include "wsrep_api.h"
@@ -7,8 +7,8 @@
 
 #include "key_data.hpp"
 #include "gu_serialize.hpp"
+#include "gu_asio.hpp" // gu::init_tls_service_v1(), gu::init_allowlist_service_v1()
 #include "gu_thread_keys.hpp"
-#include "gu_asio.hpp" // gu::init_tls_service_v1()
 #include "wsrep_membership_service.h"
 
 #if defined(GALERA_MULTIMASTER)
@@ -859,6 +859,9 @@ wsrep_status_t galera_release(wsrep_t*            gh,
     assert(gh != 0);
     assert(gh->ctx != 0);
 
+    // A trx object was not created for this handle
+    if (not ws_handle->opaque) return WSREP_OK;
+
     REPL_CLASS * repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
     TrxHandleMaster* txp(get_local_trx(repl, ws_handle, false));
 
@@ -1662,6 +1665,62 @@ int wsrep_loader(wsrep_t *hptr)
 }
 
 extern "C"
+wsrep_status_t
+    wsrep_ps_fetch_cluster_info_v2 (wsrep_t*            gh,
+                                    wsrep_node_info_t** nodes,
+                                    uint32_t*           size,
+                                    int32_t*            my_index,
+                                    uint32_t            max_version)
+{
+    assert(gh != 0);
+    assert(gh->ctx != 0);
+
+    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    return repl->fetch_pfs_info(nodes, size, my_index, max_version);
+}
+
+extern "C"
+void wsrep_ps_free_cluster_info (wsrep_t* gh,
+                                 wsrep_node_info_t* nodes)
+{
+    assert(gh != 0);
+    assert(gh->ctx != 0);
+
+    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    repl->free_pfs_info(nodes);
+}
+
+extern "C"
+wsrep_status_t
+    wsrep_ps_fetch_node_stat_v2 (wsrep_t*            gh,
+                                 wsrep_node_stat_t** nodes,
+                                 uint32_t*           size,
+                                 int32_t*            my_index,
+                                 uint32_t            max_version)
+{
+    assert(gh != 0);
+    assert(gh->ctx != 0);
+
+    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    return repl->fetch_pfs_stat(nodes, size, my_index, max_version);
+}
+
+extern "C"
+void wsrep_ps_free_node_stat (wsrep_t* gh,
+                              wsrep_node_stat_t* nodes)
+{
+    assert(gh != 0);
+    assert(gh->ctx != 0);
+
+    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
+
+    repl->free_pfs_stat(nodes);
+}
+
+extern "C"
 int wsrep_init_thread_service_v1(wsrep_thread_service_v1_t* ts)
 
 {
@@ -1719,57 +1778,12 @@ extern "C" void wsrep_deinit_membership_service_v1()
 }
 
 extern "C"
-wsrep_status_t
-    wsrep_ps_fetch_cluster_info_v2 (wsrep_t*            gh,
-                                    wsrep_node_info_t** nodes,
-                                    uint32_t*           size,
-                                    int32_t*            my_index,
-                                    uint32_t            max_version)
+int wsrep_init_allowlist_service_v1(wsrep_allowlist_service_v1_t *allowlist_service)
 {
-    assert(gh != 0);
-    assert(gh->ctx != 0);
-
-    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
-
-    return repl->fetch_pfs_info(nodes, size, my_index, max_version);
+    return gu::init_allowlist_service_v1(allowlist_service);
 }
 
-extern "C"
-void wsrep_ps_free_cluster_info (wsrep_t* gh,
-                                 wsrep_node_info_t* nodes)
+extern "C" void wsrep_deinit_allowlist_service_v1()
 {
-    assert(gh != 0);
-    assert(gh->ctx != 0);
-
-    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
-
-    repl->free_pfs_info(nodes);
-}
-
-extern "C"
-wsrep_status_t
-    wsrep_ps_fetch_node_stat_v2 (wsrep_t*            gh,
-                                 wsrep_node_stat_t** nodes,
-                                 uint32_t*           size,
-                                 int32_t*            my_index,
-                                 uint32_t            max_version)
-{
-    assert(gh != 0);
-    assert(gh->ctx != 0);
-
-    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
-
-    return repl->fetch_pfs_stat(nodes, size, my_index, max_version);
-}
-
-extern "C"
-void wsrep_ps_free_node_stat (wsrep_t* gh,
-                              wsrep_node_stat_t* nodes)
-{
-    assert(gh != 0);
-    assert(gh->ctx != 0);
-
-    REPL_CLASS* repl(reinterpret_cast< REPL_CLASS * >(gh->ctx));
-
-    repl->free_pfs_stat(nodes);
+    gu::deinit_allowlist_service_v1();
 }

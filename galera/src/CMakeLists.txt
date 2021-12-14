@@ -30,8 +30,8 @@ add_library(galera
 
 target_include_directories(galera
   PRIVATE
-  ${CMAKE_SOURCE_DIR}/wsrep/src
-  ${CMAKE_SOURCE_DIR}/wsrep/ps
+  ${PROJECT_SOURCE_DIR}/wsrep/src
+  ${PROJECT_SOURCE_DIR}/wsrep/ps
   )
 
 # TODO: Fix.
@@ -60,8 +60,8 @@ target_compile_definitions(galera_smm_static
 
 target_include_directories(galera_smm_static
   PRIVATE
-  ${CMAKE_SOURCE_DIR}/wsrep/src
-  ${CMAKE_SOURCE_DIR}/wsrep/ps
+  ${PROJECT_SOURCE_DIR}/wsrep/src
+  ${PROJECT_SOURCE_DIR}/wsrep/ps
   )
 
 # TODO: Fix.
@@ -79,12 +79,12 @@ add_library(galera_smm
   )
 
 set_target_properties(galera_smm PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
   )
 
 target_include_directories(galera_smm
   PRIVATE
-  ${CMAKE_SOURCE_DIR}/wsrep/src
+  ${PROJECT_SOURCE_DIR}/wsrep/src
   ${CMAKE_SOURCE_DIR}/wsrep/ps
   )
 
@@ -132,7 +132,7 @@ if (GALERA_VERSION_SCRIPT)
   add_custom_command(TARGET galera_smm POST_BUILD
     COMMAND
     sh -c "! ${CMAKE_OBJDUMP} -T libgalera_smm.so | grep asio 1> /dev/null"
-    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
     COMMENT "Checking library symbol visibility (hidden)"
     VERBATIM)
 else()
@@ -140,7 +140,7 @@ else()
   add_custom_command(TARGET galera_smm POST_BUILD
     COMMAND
     sh -c "${CMAKE_OBJDUMP} -T libgalera_smm.so | grep asio 1> /dev/null"
-    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
     COMMENT "Checking library symbol visibility (not hidden)"
     VERBATIM)
 endif()
@@ -150,7 +150,7 @@ if (NOT GALERA_WITH_SSL)
   add_custom_command(TARGET galera_smm POST_BUILD
     COMMAND
     sh -c "! (${CMAKE_OBJDUMP} -x libgalera_smm.so | grep NEEDED.*crypto 1> /dev/null) && ! (${CMAKE_OBJDUMP} -x libgalera_smm.so | grep NEEDED.*ssl 1> /dev/null)"
-    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
     COMMENT "Verifying that library is not linked with SSL"
     VERBATIM)
 else()
@@ -159,7 +159,7 @@ else()
     add_custom_command(TARGET galera_smm POST_BUILD
       COMMAND
       sh -c "(${CMAKE_OBJDUMP} -t libgalera_smm.so | grep OPENSSL 1> /dev/null) && (${CMAKE_OBJDUMP} -t libgalera_smm.so | grep CRYPTO 1> /dev/null)"
-      WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+      WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
       COMMENT "Verifying that library has OpenSSL linked statically"
       VERBATIM)
   else()
@@ -168,7 +168,7 @@ else()
       COMMAND
       sh -c "(${CMAKE_OBJDUMP} -x libgalera_smm.so | grep NEEDED.*crypto 1> /dev/null) && (${CMAKE_OBJDUMP} -x libgalera_smm.so | grep NEEDED.*ssl 1> /dev/null)"
       COMMENT "Verifying that library is linked with SSL"
-      WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+      WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
       VERBATIM)
   endif()
 endif()

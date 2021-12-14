@@ -12,7 +12,6 @@
 #define _gcs_group_h_
 
 #include <wsrep_ps.h> // pfs declarations
-
 #include "gcs_gcache.hpp"
 #include "gcs_node.hpp"
 #include "gcs_recv_msg.hpp"
