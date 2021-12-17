@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2020 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2021 Codership Oy <info@codership.com>
  */
 
 #include "gcache_rb_store.hpp"
@@ -43,13 +43,15 @@ namespace gcache
     void
     RingBuffer::constructor_common() {}
 
-    RingBuffer::RingBuffer (const std::string& name,
+    RingBuffer::RingBuffer (ProgressCallback*  pcb,
+                            const std::string& name,
                             size_t             size,
                             seqno2ptr_t&       seqno2ptr,
                             gu::UUID&          gid,
                             int const          dbg,
                             bool const         recover)
     :
+        pcb_       (pcb),
         fd_        (name, check_size(size)),
         mmap_      (fd_),
         preamble_  (static_cast<char*>(mmap_.ptr)),
@@ -650,7 +652,7 @@ namespace gcache
         {
             if (gid_ != gu::UUID())
             {
-                log_info << "Recovering GCache ring buffer: version: " << version
+                log_info << "Recovering GCache ring buffer: version: " <<version
                          << ", UUID: " << gid_ << ", offset: " << offset;
 
                 try
@@ -680,6 +682,25 @@ namespace gcache
         write_preamble(true);
     }
 
+    /* Helper callback class to specilize for different progress types */
+    template <typename T>
+    class recover_progress_callback : public gu::Progress<T>::Callback
+    {
+    public:
+        recover_progress_callback(gcache::ProgressCallback* pcb)
+            : pcb_(pcb)
+        {}
+        ~recover_progress_callback() {}
+        void operator()(T const total, T const done)
+        {
+            if (pcb_) (*pcb_)(total, done);
+        }
+    private:
+        recover_progress_callback(const recover_progress_callback&);
+        recover_progress_callback& operator=(recover_progress_callback);
+        ProgressCallback* pcb_;
+    };
+
     seqno_t
     RingBuffer::scan(off_t const offset, int const scan_step)
     {
@@ -705,8 +726,10 @@ namespace gcache
                 segment_scans = 1;
         }
 
-        gu::Progress<ptrdiff_t> progress("GCache::RingBuffer initial scan",
-                                         " bytes", end_ - start_, 1<<22 /*4Mb*/);
+        recover_progress_callback<ptrdiff_t> scan_progress_callback(pcb_);
+        gu::Progress<ptrdiff_t> progress(&scan_progress_callback,
+                                         "GCache::RingBuffer initial scan",
+                                         " bytes", end_ - start_, 1<<22/*4Mb*/);
 
         while (segment_scans < 2)
         {
@@ -1056,56 +1079,62 @@ namespace gcache
             estimate_space();
 
             /* now discard all the locked-in buffers (see seqno_reset()) */
-            gu::Progress<size_t> progress(
-                "GCache::RingBuffer unused buffers scan",
-                " bytes", size_used_, 1<<22 /* 4Mb */);
-
             size_t total(0);
             size_t locked(0);
-            bh = BH_cast(first_);
-            while (bh != BH_cast(next_))
+
             {
-                progress.update(aligned_size(bh->size));
+                recover_progress_callback<size_t>
+                    unused_progress_callback(pcb_);
+                gu::Progress<size_t> progress(
+                    &unused_progress_callback,
+                    "GCache::RingBuffer unused buffers scan",
+                    " bytes", size_used_, 1<<22 /* 4Mb */);
 
-                if (gu_likely(bh->size > 0))
+                bh = BH_cast(first_);
+                while (bh != BH_cast(next_))
                 {
-                    total++;
+                    progress.update(aligned_size(bh->size));
 
-                    if (gu_likely(bh->seqno_g > 0))
+                    if (gu_likely(bh->size > 0))
                     {
-                        free(bh); // on recovery no buffer is used
+                        total++;
+
+                        if (gu_likely(bh->seqno_g > 0))
+                        {
+                            free(bh); // on recovery no buffer is used
+                        }
+                        else
+                        {
+                            /* anything that is not ordered must be discarded */
+                            assert(SEQNO_NONE == bh->seqno_g ||
+                                   SEQNO_ILL  == bh->seqno_g);
+                            locked++;
+                            empty_buffer(bh);
+                            discard(bh);
+                            size_used_ -= aligned_size(bh->size);
+                            // size_free_ is taken care of in discard()
+                        }
+
+                        bh = BH_next(bh);
                     }
                     else
                     {
-                        /* anything that is not ordered must be discarded */
-                        assert(SEQNO_NONE == bh->seqno_g ||
-                               SEQNO_ILL  == bh->seqno_g);
-                        locked++;
-                        empty_buffer(bh);
-                        discard(bh);
-                        size_used_ -= aligned_size(bh->size);
-                        // size_free_ is taken care of in discard()
+                        bh = BH_cast(start_); // rollover
                     }
+                }
 
-                    bh = BH_next(bh);
-                }
-                else
-                {
-                     bh = BH_cast(start_); // rollover
-                }
+                progress.finish();
+
+                /* No buffers on recovery should be in used state */
+                assert(0 == size_used_);
+
+                log_info << "GCache DEBUG: RingBuffer::recover(): found "
+                         << locked << '/' << total << " locked buffers";
+                log_info << "GCache DEBUG: RingBuffer::recover(): free space: "
+                         << size_free_ << '/' << size_cache_;
+
+                assert_sizes();
             }
-
-            progress.finish();
-
-            /* No buffers on recovery should be in used state */
-            assert(0 == size_used_);
-
-            log_info << "GCache DEBUG: RingBuffer::recover(): found "
-                     << locked << '/' << total << " locked buffers";
-            log_info << "GCache DEBUG: RingBuffer::recover(): free space: "
-                     << size_free_ << '/' << size_cache_;
-
-            assert_sizes();
         }
         else
         {

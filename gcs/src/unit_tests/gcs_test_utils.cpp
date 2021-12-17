@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2020 Codership Oy <info@codership.com>
+ * Copyright (C) 2015-2021 Codership Oy <info@codership.com>
  */
 
 #include "gcs_test_utils.hpp"
@@ -79,14 +79,14 @@ GcsGroup::common_ctor(const std::string& node_name,
 
     if (enc)
     {
-        gcache_ = new gcache::GCache(conf_, path_, gcache_test_encrypt_cb,
+        gcache_ = new gcache::GCache(NULL,conf_, path_, gcache_test_encrypt_cb,
                                      NULL);
         wsrep_enc_key_t const key = { node_name.c_str(), node_name.length() };
         gcache_->set_enc_key(key);
     }
     else
     {
-        gcache_ = new gcache::GCache(conf_, path_);
+        gcache_ = new gcache::GCache(NULL, conf_, path_);
     }
 
     int const err(gcs_group_init(&group_, &conf_,

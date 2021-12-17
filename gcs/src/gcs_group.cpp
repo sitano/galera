@@ -2316,3 +2316,4 @@ int gcs_group_fetch_pfs_stat(const gcs_group_t*  group,
         return -ENOTCONN;
     }
 }
+

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2020 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2021 Codership Oy <info@codership.com>
  */
 
 #include "../src/galera_service_thd.hpp"

@@ -219,6 +219,10 @@ struct gcs_conn
 
     int inner_close_count; // how many times _close has been called.
     int outer_close_count; // how many times gcs_close has been called.
+
+    /* JOINED -> SYNCED catch-up progress */
+    gu::Progress<gcs_seqno_t>::Callback* progress_cb_;
+    gu::Progress<gcs_seqno_t>* progress_;
 };
 
 // Oh C++, where art thou?
@@ -285,6 +289,7 @@ enomem:
 /* Creates a group connection handle */
 gcs_conn_t*
 gcs_create (gu_config_t* const conf, gcache_t* const gcache,
+            gu::Progress<gcs_seqno_t>::Callback* const progress_cb,
             const char* const node_name, const char* const inc_addr,
             int const repl_proto_ver, int const appl_proto_ver)
 {
@@ -357,6 +362,9 @@ gcs_create (gu_config_t* const conf, gcache_t* const gcache,
     gu_mutex_init(gu::get_mutex_key(gu::GU_MUTEX_KEY_GCS_VOTE),
                   &conn->vote_lock_);
     gu_cond_init(gu::get_cond_key(gu::GU_COND_KEY_GCS_VOTE), &conn->vote_cond_);
+
+    conn->progress_cb_ = progress_cb;
+    conn->progress_ = NULL;
 
     return conn; // success
 
@@ -718,7 +726,7 @@ gcs_become_primary (gcs_conn_t* conn)
     assert(conn->join_gtid.seqno() <= 0      ||
            conn->state == GCS_CONN_PRIMARY   ||
            conn->state == GCS_CONN_JOINER    ||
-           conn->state == GCS_CONN_OPEN /* joiner that has received NON_PRIM */);
+           conn->state == GCS_CONN_OPEN /* joiner that has received NON_PRIM*/);
 
     if (!gcs_shift_state (conn, GCS_CONN_PRIMARY)) {
         gu_fatal ("Protocol violation, can't continue");
@@ -816,6 +824,19 @@ _release_sst_flow_control (gcs_conn_t* conn)
 }
 
 static void
+start_progress(gcs_conn_t* conn)
+{
+    gu_fifo_lock(conn->recv_q);
+    {
+        conn->progress_ = new gu::Progress<gcs_seqno_t>(
+            conn->progress_cb_,
+            "Processing event queue:", " events",
+            gu_fifo_length(conn->recv_q), 16);
+    }
+    gu_fifo_release(conn->recv_q);
+}
+
+static void
 gcs_become_joined (gcs_conn_t* conn)
 {
     int ret;
@@ -835,6 +856,7 @@ gcs_become_joined (gcs_conn_t* conn)
         conn->fc_offset    = conn->queue_len;
         conn->join_gtid    = gu::GTID();
         conn->need_to_join = false;
+        start_progress(conn);
         gu_debug("Become joined, FC offset %ld", conn->fc_offset);
         /* One of the cases when the node can become SYNCED */
         if ((ret = gcs_send_sync (conn))) {
@@ -851,6 +873,12 @@ gcs_become_synced (gcs_conn_t* conn)
 {
     gu_fifo_lock(conn->recv_q);
     {
+        if (conn->progress_)
+        {
+            conn->progress_->finish();
+            delete conn->progress_;
+            conn->progress_ = nullptr;
+        }
         gcs_shift_state (conn, GCS_CONN_SYNCED);
         conn->sync_sent(false);
     }
@@ -1238,6 +1266,7 @@ gcs_handle_actions (gcs_conn_t* conn, struct gcs_act_rcvd& rcvd)
         break;
     case GCS_ACT_SYNC:
         if (rcvd.id < 0) {
+            /* sending SYNC failed, need to resend */
             gu_fifo_lock(conn->recv_q);
             conn->sync_sent(false);
             gu_fifo_release(conn->recv_q);
@@ -1260,6 +1289,8 @@ gcs_handle_actions (gcs_conn_t* conn, struct gcs_act_rcvd& rcvd)
 static inline void
 GCS_FIFO_PUSH_TAIL (gcs_conn_t* conn, ssize_t size)
 {
+    if (conn->progress_) conn->progress_->update_total(1);
+
     conn->recv_q_size += size;
     gu_fifo_push_tail(conn->recv_q);
 }
@@ -2047,6 +2078,8 @@ long gcs_desync (gcs_conn_t* conn, gcs_seqno_t& order)
 static inline void
 GCS_FIFO_POP_HEAD (gcs_conn_t* conn, ssize_t size)
 {
+    if (conn->progress_) conn->progress_->update(1);
+
     assert (conn->recv_q_size >= size);
     conn->recv_q_size -= size;
     gu_fifo_pop_head (conn->recv_q);
