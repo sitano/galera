@@ -1,4 +1,4 @@
-Source: galera-4
+Source: galera-enterprise-4
 Maintainer: Codership Oy <info@codership.com>
 Uploaders: Otto Kekäläinen <otto@kekalainen.net>
 Section: database
@@ -17,12 +17,13 @@ Homepage: https://www.galeracluster.com/
 Vcs-Git: https://github.com/codership/galera.git
 Vcs-Browser: https://github.com/codership/galera
 
-Package: galera-4
+Package: galera-enterprise-4
 Architecture: any
 Section: libs
 Depends: ${misc:Depends},
          ${shlibs:Depends}
 Conflicts: galera-3,
+	   galera-4,
            garbd-2,
            garbd-3,
            garbd2,
@@ -39,6 +40,7 @@ Breaks: galera
 Replaces: galera
 Provides: galera,
           galera4,
+	  galera-enterprise-4,
           percona-xtradb-cluster-galera-26,
           wsrep
 Description: Replication framework for transactional applications
@@ -49,9 +51,10 @@ Description: Replication framework for transactional applications
  .
  This package contains the Galera library/plugin.
 
-Package: galera-arbitrator-4
+Package: galera-enterprise-arbitrator-4
 Architecture: any
 Conflicts: galera-arbitrator-3,
+	   galera-arbitrator-4,
            garbd-2,
            garbd2,
            percona-galera-arbitrator-3,
