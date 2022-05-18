@@ -710,6 +710,11 @@ void gu::AsioIoService::run_one()
     impl_->native().run_one();
 }
 
+void gu::AsioIoService::poll_one()
+{
+    impl_->native().poll_one();
+}
+
 void gu::AsioIoService::run()
 {
     impl_->native().run();
