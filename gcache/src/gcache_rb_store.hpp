@@ -146,6 +146,8 @@ namespace gcache
             return GU_ALIGN(s, ALIGNMENT);
         }
 
+        void dump_map() const;
+
     private:
 
         static size_t const PREAMBLE_LEN = 1024;
