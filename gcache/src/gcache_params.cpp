@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Codership Oy <info@codership.com>
+ * Copyright (C) 2009-2022 Codership Oy <info@codership.com>
  */
 
 #include "GCache.hpp"
@@ -109,6 +109,11 @@ gcache::GCache::Params::Params (gu::Config& cfg, const std::string& data_dir)
 void
 gcache::GCache::param_set (const std::string& key, const std::string& val)
 {
+    if (params.debug())
+    {
+        log_info << "GCache: setting " << key << " to " << val;
+    }
+
     if (key == GCACHE_PARAMS_RB_NAME)
     {
         gu_throw_error(EPERM) << "Can't change ring buffer name in runtime.";
@@ -167,7 +172,7 @@ gcache::GCache::param_set (const std::string& key, const std::string& val)
 
         config.set<size_t>(key, tmp_size);
         params.keep_plaintext_size(tmp_size);
-        ps.set_plaintext_size(params.keep_plaintext_size());
+        ps.set_keep_plaintext_size(params.keep_plaintext_size());
     }
     else if (key == GCACHE_PARAMS_RECOVER)
     {

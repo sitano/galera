@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2022 Codership Oy <info@codership.com>
  */
 
 /*! @file page store class */
@@ -88,7 +88,10 @@ namespace gcache
 
         void  set_keep_size (size_t size) { keep_size_ = size; }
 
-        void  set_plaintext_size (size_t size) { plaintext_size_ = size; }
+        void  set_keep_plaintext_size (size_t size)
+        {
+            keep_plaintext_size_ = size;
+        }
 
         void  set_debug(int dbg);
 

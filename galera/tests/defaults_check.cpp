@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2018-2020 Codership Oy <info@codership.com>
+// Copyright (C) 2018-2022 Codership Oy <info@codership.com>
 //
 
 #include <wsrep_api.h>
@@ -281,6 +281,13 @@ defaults(bool const enc)
         };
     ret = provider.init(&provider, &init_args);
     ck_assert(WSREP_OK == ret);
+    if (enc_cb)
+    {
+        const char* key = "oaiasjfewoer";
+        wsrep_buf buf = { key, strlen(key) };
+        ret = provider.enc_set_key(&provider, &buf);
+        ck_assert(WSREP_OK == ret);
+    }
 
     /* some defaults are set only on connection attmept */
     ret = provider.connect(&provider, "cluster_name", "gcomm://", "", false);
