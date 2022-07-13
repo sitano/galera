@@ -479,6 +479,9 @@ then
             then
                 BUILD_OPT+=" -DWITH_CURL=system"
             fi
+            BUILD_OPT+=" -DWITH_KEYRING_VAULT=ON"
+            BUILD_OPT+=" -DWITH_KEYRING_VAULT_TEST=ON"
+
         else # MariaDB-specific build options
             BUILD_OPT+=" -DWITH_READLINE=system"
             BUILD_OPT+=" -DWITH_DEBUG:BOOL=ON"
