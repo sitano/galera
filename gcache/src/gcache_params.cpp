@@ -43,7 +43,7 @@ gcache::GCache::Params::register_params(gu::Config& cfg)
             gu::Config::Flag::type_integer);
     cfg.add(GCACHE_PARAMS_KEEP_PAGES_SIZE, GCACHE_DEFAULT_KEEP_PAGES_SIZE,
             gu::Config::Flag::type_integer);
-    cfg.add(GCACHE_PARAMS_KEEP_PAGES_SIZE,
+    cfg.add(GCACHE_PARAMS_KEEP_PLAINTEXT_SIZE,
             gu::Config::Flag::type_integer);
 #ifndef NDEBUG
     cfg.add(GCACHE_PARAMS_DEBUG,           GCACHE_DEFAULT_DEBUG);
