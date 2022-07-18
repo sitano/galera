@@ -1772,7 +1772,9 @@ static int wsrep_parameter_init(wsrep_parameter& wsrep_param,
         ret = gu_str2bool(param.value().c_str(), &wsrep_param.value.as_bool);
         break;
     case gu::Config::Flag::type_integer:
-        ret = gu_str2ll(param.value().c_str(), (long long*)&wsrep_param.value.as_integer);
+        long long llval;
+        ret = gu_str2ll(param.value().c_str(), &llval);
+        wsrep_param.value.as_integer = llval;
         break;
     case gu::Config::Flag::type_double:
         ret = gu_str2dbl(param.value().c_str(), &wsrep_param.value.as_double);
