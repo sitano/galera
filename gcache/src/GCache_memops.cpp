@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2021 Codership Oy <info@codership.com>
+ * Copyright (C) 2009-2022 Codership Oy <info@codership.com>
  */
 
 #include "GCache.hpp"
@@ -55,7 +55,7 @@ namespace gcache
             else
             {
 #ifndef NDEBUG
-                if (params_debug) cond.debug_fail();
+                if (params_debug) cond.debug_not_released();
 #endif
                 assert(cond.check());
                 return false;
@@ -89,10 +89,10 @@ namespace gcache
             log_info << "GCache::discard_size(): "
                      << locked << " is locked, bailing out.";
         }
-        void debug_fail()
+        void debug_not_released()
         {
             log_info << "GCache::discard_size() can't discard "
-                     << (upto_ - done_) << ", bailing out.";
+                     << (upto_ - done_) << " bytes: not released, bailing out.";
         }
     };
 
@@ -126,7 +126,7 @@ namespace gcache
             log_info << "GCache::discard_seqno(" << upto_ << "): "
                      << locked << " is locked, bailing out.";
         }
-        void debug_fail()
+        void debug_not_released()
         {
             log_info << "GCache::discard_seqno(" << upto_ << "): "
                      << done_ + 1 << " not released, bailing out.";

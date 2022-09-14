@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2022 Codership Oy <info@codership.com>
  */
 
 /*! @file page file class implementation */
@@ -9,6 +9,7 @@
 
 #include <gu_throw.hpp>
 #include <gu_logger.hpp>
+#include <gu_hexdump.hpp>
 
 // for posix_fadvise()
 #if !defined(_XOPEN_SOURCE)
@@ -205,6 +206,20 @@ gcache::Page::xcrypt(wsrep_encrypt_cb_t    const encrypt_cb,
 {
     assert(encrypt_cb);
 
+    if (gu_unlikely(key_.size() == 0)) /* If key is trivial just do a copy */
+    {
+#ifndef NDEBUG
+        if (debug_)
+        {
+            log_info << name()
+                     << ": xcrypt() trivial copy of " << size << " bytes:\n"
+                     << gu::Hexdump(from, size, true);
+        }
+#endif /* NDEBUG */
+        ::memcpy(to, from, size);
+        return;
+    }
+
     size_t const offset(dir == WSREP_ENC ?
                         /* writing to page */
                         static_cast<uint8_t*>(to) - start() :
@@ -222,10 +237,28 @@ gcache::Page::xcrypt(wsrep_encrypt_cb_t    const encrypt_cb,
     {
         assert(0);
         gu_throw_fatal << "Encryption callback failed with return value " << ret
-                       <<". Page: " << *this
+                       << ". Page: " << *this
                        << ", offset: " << offset << ", size: " << size
                        << ", direction: " << dir;
     }
+
+#ifndef NDEBUG
+    if (debug_)
+    {
+        if (dir == WSREP_ENC)
+        {
+            log_info << name()
+                     << ": xcrypt() encrypted " << size << " bytes:\n"
+                     << gu::Hexdump(from, size, true);
+        }
+        else
+        {
+            log_info << name()
+                     << ": xcrypt() decrypted " << size << " bytes:\n"
+                     << gu::Hexdump(to, size, true);
+        }
+    }
+#endif /* NDEBUG */
 }
 
 

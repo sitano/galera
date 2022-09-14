@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2019 Codership Oy <info@codership.com>
+ * Copyright (C) 2010-2022 Codership Oy <info@codership.com>
  */
 
 /*! @file page store implementation */
@@ -129,6 +129,10 @@ void
 gcache::PageStore::set_enc_key (const Page::EncKey& new_key)
 {
     /* on key change create new page (saves current key there) */
+    if (debug_)
+    {
+        log_info << "GCache: encryption key rotated, size: " << new_key.size();
+    }
     new_page(0, new_key);
     enc_key_ = new_key;
 }

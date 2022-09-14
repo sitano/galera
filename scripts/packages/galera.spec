@@ -53,7 +53,7 @@ BuildRoot:     %{_tmppath}/%{name}-%{version}
 BuildRequires: glibc-devel
 BuildRequires: openssl-devel
 
-%if 0%{?rhel} == 8
+%if 0%{?rhel} >= 8
 BuildRequires: python3-scons
 %else
 BuildRequires: scons
