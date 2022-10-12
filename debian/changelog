@@ -1,5 +1,6 @@
-galera-enterprise-4 (26.4.13) UNRELEASED; urgency=medium
+galera-4 (26.4.13-jammy) jammy; urgency=medium
 
-  * Galera Enterprise 4 release
+  * Galera 4 release
+  * Version upgrade
 
- -- Codership Oy <info@codership.com>  Mon, 04 Jul 2022 15:00:36 +0300
+ -- Codership Oy <info@codership.com>  Wed, 12 Oct 2022 08:26:41 +0300
