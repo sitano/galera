@@ -329,7 +329,7 @@ defaults(bool const enc)
     ::unlink("grastate.dat");
     if (enc)
     {
-        static const char* page_file = "galera.page.000000";
+        static const char* page_file = "gcache.page.000000";
         ck_assert_msg(0 == ::unlink(page_file),
                       "Failed to cleanup page file '%s': %d(%s)",
                       page_file, errno, strerror(errno));
