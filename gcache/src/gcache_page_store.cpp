@@ -17,7 +17,7 @@
 
 #include <iomanip>
 
-static std::string const base_name = "galera.page.";
+static const std::string base_name ("gcache.page.");
 
 static std::string
 make_base_name (const std::string& dir_name)
