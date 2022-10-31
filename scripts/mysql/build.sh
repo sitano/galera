@@ -478,6 +478,7 @@ then
             if [ "$MYSQL_MM_VER" -ge "80" ]
             then
                 BUILD_OPT+=" -DWITH_CURL=system"
+                BUILD_OPT+=" -DWITH_ZLIB=bundled"
             fi
             BUILD_OPT+=" -DWITH_KEYRING_VAULT=ON"
             BUILD_OPT+=" -DWITH_KEYRING_VAULT_TEST=ON"
