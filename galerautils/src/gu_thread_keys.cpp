@@ -106,6 +106,10 @@ public:
             std::make_pair("gcache", (wsrep_mutex_key_t*)(0)));
         mutex_keys_vec.push_back(
             std::make_pair("gcs_membership", (wsrep_mutex_key_t*)(0)));
+        mutex_keys_vec.push_back(
+            std::make_pair("writeset_waiter_map", (wsrep_mutex_key_t*)(0)));
+        mutex_keys_vec.push_back(
+            std::make_pair("writeset_waiter", (wsrep_mutex_key_t*)(0)));
         assert(mutex_keys_vec.size() == gu::GU_MUTEX_KEY_MAX);
     }
     const char* name;
@@ -166,6 +170,8 @@ static struct CondKeysVecInitializer
             std::make_pair("gcs_core_caused", (wsrep_cond_key_t*)(0)));
         cond_keys_vec.push_back(
             std::make_pair("gcache", (wsrep_cond_key_t*)(0)));
+        cond_keys_vec.push_back(
+            std::make_pair("write_set_waiter", (wsrep_cond_key_t*)(0)));
         assert(cond_keys_vec.size() == gu::GU_COND_KEY_MAX);
     }
     const char* name;

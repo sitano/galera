@@ -531,12 +531,8 @@ galera_terminate_trx(wsrep_t*           const gh,
         trx->set_state(TrxHandle::S_MUST_ABORT);
         trx->set_state(TrxHandle::S_ABORTING);
     }
-    wsrep_status_t retval(repl->send(*trx, meta));
-    if (retval == WSREP_OK)
-    {
-        retval = galera_sync_wait(gh, NULL, -1, NULL);
-    }
-    return retval;
+
+    return repl->terminate_trx(*trx, meta);
 }
 
 extern "C"

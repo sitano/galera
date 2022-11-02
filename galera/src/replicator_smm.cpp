@@ -276,6 +276,7 @@ void galera::ReplicatorSMM::shift_to_CLOSED()
     }
 
     closing_cond_.broadcast();
+    write_set_waiters_.interrupt_waiters();
 }
 
 void galera::ReplicatorSMM::wait_for_CLOSED(gu::Lock& lock)
@@ -1138,6 +1139,25 @@ wsrep_status_t galera::ReplicatorSMM::replay_trx(TrxHandleMaster& trx,
     log_debug << "replaying failed for trx " << trx;
     assert(trx.state() == TrxHandle::S_ABORTING);
 
+    return retval;
+}
+
+wsrep_status_t galera::ReplicatorSMM::terminate_trx(TrxHandleMaster& trx,
+                                                    wsrep_trx_meta_t* meta)
+{
+    auto waiter(
+        write_set_waiters_.register_waiter(meta->stid.node, meta->stid.trx));
+    wsrep_status_t retval(send(trx, meta));
+    if (retval == WSREP_OK)
+    {
+        if (waiter->wait())
+        {
+            // wait was interrupted by shutdown,
+            // or non-prim configuration
+            retval = WSREP_CONN_FAIL;
+        }
+    }
+    write_set_waiters_.unregister_waiter(meta->stid.node, meta->stid.trx);
     return retval;
 }
 
@@ -2137,6 +2157,11 @@ void galera::ReplicatorSMM::process_trx(void* recv_ctx,
             }
 
             gu_trace(apply_trx(recv_ctx, ts));
+
+            if (ts.is_streaming_end())
+            {
+                write_set_waiters_.signal(ts.source_id(), ts.trx_id());
+            }
         }
         catch (std::exception& e)
         {
@@ -2545,6 +2570,8 @@ void galera::ReplicatorSMM::process_non_prim_conf_change(
             state_.shift_to(S_CONNECTED);
         }
     }
+
+    write_set_waiters_.interrupt_waiters();
 }
 
 static void validate_local_prim_view_info(const wsrep_view_info_t* view_info,

@@ -670,6 +670,15 @@ namespace galera
             return !((flags() & F_BEGIN) && (flags() & F_COMMIT));
         }
 
+        // Return true if this is the last fragment of a
+        // streaming replication transaction.
+        bool is_streaming_end() const
+        {
+            return ((write_set_flags_ & F_BEGIN) == 0)
+                   && ((write_set_flags_ & F_COMMIT)
+                       || (write_set_flags_ & F_ROLLBACK));
+        }
+
         void cert_bypass(bool const val)
         {
             assert(true  == val);
