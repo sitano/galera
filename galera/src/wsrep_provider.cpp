@@ -20,7 +20,7 @@
 #endif
 
 #include "wsrep_params.hpp"
-#include "event_service.hpp"
+#include "gu_event_service.hpp"
 #include "wsrep_config_service.h"
 
 #include <cassert>
@@ -1705,12 +1705,12 @@ extern "C" void wsrep_deinit_allowlist_service_v1()
 extern "C"
 int wsrep_init_event_service_v1(wsrep_event_service_v1_t *event_service)
 {
-    return galera::EventService::init_v1(event_service);
+    return gu::EventService::init_v1(event_service);
 }
 
 extern "C" void wsrep_deinit_event_service_v1()
 {
-    galera::EventService::deinit_v1();
+    gu::EventService::deinit_v1();
 }
 
 static int map_parameter_flags(int flags)
@@ -1742,10 +1742,12 @@ static int wsrep_parameter_init(wsrep_parameter& wsrep_param,
         ret = gu_str2bool(param.value().c_str(), &wsrep_param.value.as_bool);
         break;
     case gu::Config::Flag::type_integer:
-        long long llval;
-        ret = gu_str2ll(param.value().c_str(), &llval);
-        wsrep_param.value.as_integer = llval;
+    {
+        long long tmp;
+        ret = gu_str2ll(param.value().c_str(), &tmp);
+        wsrep_param.value.as_integer = tmp;
         break;
+    }
     case gu::Config::Flag::type_double:
         ret = gu_str2dbl(param.value().c_str(), &wsrep_param.value.as_double);
         break;
