@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eu
+set -eux
 
 # $Id$
 
@@ -51,6 +51,10 @@ Options:
     "\nSet DISABLE_GCOMM/DISABLE_VSBES to 'yes' to disable respective modules"
 EOF
 }
+
+# Scons executable on RHEL-8 is scons-3
+SCONSBIN=scons
+[[ -n "$(which scons-3)" ]] && SCONSBIN=scons-3
 
 OS=$(uname)
 # disable building vsbes by default
@@ -452,12 +456,12 @@ then
 
     if [ "$SCRATCH" == "yes" ]
     then
-        scons -Q -c --conf=force $scons_args $SCONS_OPTS
+        ${SCONSBIN} -Q -c --conf=force $scons_args $SCONS_OPTS
     fi
 
     if [ "$SKIP_BUILD" != "yes" ]
     then
-        scons $scons_args -j $JOBS $SCONS_OPTS
+        ${SCONSBIN} $scons_args -j $JOBS $SCONS_OPTS
     fi
 
 elif test "$SKIP_BUILD" == "no"; then # Build using autotools
