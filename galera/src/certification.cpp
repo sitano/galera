@@ -1124,14 +1124,6 @@ galera::Certification::adjust_position(const View&         view,
     }
 }
 
-wsrep_seqno_t
-galera::Certification::increment_position()
-{
-    gu::Lock lock(mutex_);
-    position_++;
-    return position_;
-}
-
 galera::Certification::TestResult
 galera::Certification::test(const TrxHandleSlavePtr& trx, bool store_keys)
 {
@@ -1167,6 +1159,7 @@ galera::Certification::purge_trxs_upto_(wsrep_seqno_t const seqno,
                                         bool const          handle_gcache)
 {
     assert (seqno > 0);
+    assert(mutex_.owned());
 
     TrxMap::iterator purge_bound(trx_map_.upper_bound(seqno));
 
@@ -1278,6 +1271,22 @@ galera::Certification::append_trx(const TrxHandleSlavePtr& trx)
     return retval;
 }
 
+
+void galera::Certification::append_dummy_preload(const TrxHandleSlavePtr& trx)
+{
+    assert(trx->global_seqno() >= 0);
+    assert(trx->global_seqno() > position_);
+    gu::Lock lock(mutex_);
+    /* Dummy preloads have only meta data available, not the whole write set,
+       so modifying or accessing the trx object causes problems later on.
+       Insert nullptr as a placeholder for seqno. */
+    if (not trx_map_.insert(std::make_pair(trx->global_seqno(), nullptr))
+                .second)
+    {
+        gu_throw_fatal << "duplicate trx entry in dummy preload";
+    }
+    position_ = trx->global_seqno();
+}
 
 wsrep_seqno_t galera::Certification::set_trx_committed(TrxHandleSlave& trx)
 {
