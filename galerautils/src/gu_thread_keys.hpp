@@ -58,6 +58,8 @@ namespace gu
         GU_MUTEX_KEY_SAVED_STATE,
         GU_MUTEX_KEY_GCACHE,
         GU_MUTEX_KEY_GCS_MEMBERSHIP,
+        GU_MUTEX_KEY_WRITESET_WAITER_MAP,
+        GU_MUTEX_KEY_WRITESET_WAITER,
         GU_MUTEX_KEY_MAX /* This must always be the last */
     };
 
@@ -89,6 +91,7 @@ namespace gu
         GU_COND_KEY_GCS_FIFO_LITE_GET,
         GU_COND_KEY_GCS_CORE_CAUSED,
         GU_COND_KEY_GCACHE,
+        GU_COND_KEY_WRITESET_WAITER,
         GU_COND_KEY_MAX /* This must always be the last */
     };
 

@@ -534,12 +534,8 @@ galera_terminate_trx(wsrep_t*           const gh,
         trx->set_state(TrxHandle::S_MUST_ABORT);
         trx->set_state(TrxHandle::S_ABORTING);
     }
-    wsrep_status_t retval(repl->send(*trx, meta));
-    if (retval == WSREP_OK)
-    {
-        retval = galera_sync_wait(gh, NULL, -1, NULL);
-    }
-    return retval;
+
+    return repl->terminate_trx(*trx, meta);
 }
 
 extern "C"
@@ -1815,12 +1811,16 @@ extern "C"
 int wsrep_init_config_service_v1(wsrep_config_service_v1_t *config_service)
 {
     config_service->get_parameters = get_parameters;
+    // Deprecation checks will be done by application which uses
+    // the service.
+    gu::Config::disable_deprecation_check();
     return WSREP_OK;
 }
 
 extern "C"
 void wsrep_deinit_config_service_v1()
 {
+    gu::Config::enable_deprecation_check();
 }
 
 extern "C"
