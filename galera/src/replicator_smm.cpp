@@ -140,6 +140,7 @@ galera::ReplicatorSMM::ReplicatorSMM(const struct wsrep_init_args* args)
     wsdb_               (),
     cert_               (config_, gcache_, &service_thd_),
     pending_cert_queue_ (gcache_),
+    write_set_waiters_  (),
     local_monitor_      (gu::GU_MUTEX_KEY_LOCAL_MONITOR,
                          gu::GU_COND_KEY_LOCAL_MONITOR),
     apply_monitor_      (gu::GU_MUTEX_KEY_APPLY_MONITOR,

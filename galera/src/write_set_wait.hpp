@@ -71,7 +71,7 @@ public:
     gu::shared_ptr<WriteSetWaiter>::type
     register_waiter(const wsrep_uuid_t& node_id, wsrep_trx_id_t trx_id)
     {
-        gu::Lock lock();
+        gu::Lock lock(mutex_);
         auto ret = map_.emplace(std::make_pair(
             WaiterKey{ node_id, trx_id }, gu::make_shared<WriteSetWaiter>()));
         return ret.first->second;
@@ -79,7 +79,7 @@ public:
 
     void unregister_waiter(const wsrep_uuid_t& node_id, wsrep_trx_id_t trx_id)
     {
-        gu::Lock lock();
+        gu::Lock lock(mutex_);
         map_.erase({ node_id, trx_id });
     }
 
