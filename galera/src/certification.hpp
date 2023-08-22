@@ -64,9 +64,9 @@ namespace galera
 
         void assign_initial_position(const gu::GTID& gtid, int version);
         TestResult append_trx(const TrxHandleSlavePtr&);
-        TestResult test(const TrxHandleSlavePtr&, bool store_keys);
+        /* Append dummy trx from cert index preload. */
+        void append_dummy_preload(const TrxHandleSlavePtr&);
         wsrep_seqno_t position() const { return position_; }
-        wsrep_seqno_t increment_position(); /* for dummy IST events */
 
         /* this is for configuration change use */
         void adjust_position(const View&, const gu::GTID& gtid, int version);
@@ -147,8 +147,9 @@ namespace galera
         Certification(const Certification&);
         Certification& operator=(const Certification&);
 
-        TestResult do_test(const TrxHandleSlavePtr&, bool store_keys);
-        TestResult do_test_v3to5(TrxHandleSlave*, bool);
+        TestResult test(const TrxHandleSlavePtr&);
+        TestResult do_test(const TrxHandleSlavePtr&);
+        TestResult do_test_v3to5(TrxHandleSlave*);
         TestResult do_test_preordered(TrxHandleSlave*);
         TestResult do_test_nbo(const TrxHandleSlavePtr&);
         void purge_for_trx(TrxHandleSlave*);
@@ -182,6 +183,11 @@ namespace galera
 
             void operator()(TrxMap::value_type& vt) const
             {
+                if (not vt.second)
+                {
+                    // Dummy preload events insert only seqno
+                    return;
+                }
                 {
                     TrxHandleSlave* trx(vt.second.get());
                     // Trying to lock trx mutex here may cause deadlock
