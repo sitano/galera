@@ -723,7 +723,7 @@ certify_nbo(galera::Certification::CertIndexNBO& cert_index,
            std::distance(it.first, it.second) == 1);
 
     Certification::CertIndexNBO::iterator i;
-    if ((i = std::find_if(it.first, it.second, is_exclusive)) != cert_index.end())
+    if ((i = std::find_if(it.first, it.second, is_exclusive)) != it.second)
     {
         if (gu_unlikely(log_conflicts == true))
         {
