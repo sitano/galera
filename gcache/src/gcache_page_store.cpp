@@ -177,7 +177,7 @@ gcache::PageStore::new_page (size_type const size, const Page::EncKey& new_key)
     bh->store   = BUFFER_IN_PAGE;
     BH_release(bh);
 
-    ::memcpy(bh + 1, enc_key_.data(), enc_key_.size());
+    if (enc_key_.size() != 0) ::memcpy(bh + 1, enc_key_.data(), enc_key_.size());
 
     if (encrypt_cb_)
     {
