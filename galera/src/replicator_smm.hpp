@@ -28,7 +28,7 @@
 #include "gu_atomic.hpp"
 #include "saved_state.hpp"
 #include "gu_debug_sync.hpp"
-
+#include "write_set_wait.hpp"
 
 #include <map>
 #include <queue>
@@ -121,6 +121,8 @@ namespace galera
         wsrep_status_t replay_trx(TrxHandleMaster& trx,
                                   TrxHandleLock& lock,
                                   void* replay_ctx);
+        wsrep_status_t terminate_trx(TrxHandleMaster& trx,
+                                     wsrep_trx_meta_t* meta);
 
         wsrep_status_t sync_wait(wsrep_gtid_t* upto,
                                  int           tout,
@@ -972,6 +974,7 @@ namespace galera
          * |                 9 | SS keys   4 |              2 |               2 |
          * | 4.x            10 | PA range/ 5 | CC events /  3 |               2 |
          * |                   | UPD keys    | idx preload    |                 |
+         * |                11 | SRV keys  6 |              3 |               2 |
          * |--------------------------------------------------------------------|
          *
          * Note: str_proto_ver is decided in replicator_str.cpp based on
@@ -1117,6 +1120,7 @@ namespace galera
         };
 
         PendingCertQueue pending_cert_queue_;
+        WriteSetWaiters write_set_waiters_;
 
         // concurrency control
         Monitor<LocalOrder>  local_monitor_;

@@ -809,7 +809,8 @@ namespace gcache
                                                        sizeof(cs_old)));
                         std::ostringstream msg;
 
-                        msg << "Attempt to reuse the same seqno: " << seqno_g
+                        msg << "Attempt (" << collision_count
+                            << ") to reuse the same seqno: " << seqno_g
                             << ". New ptr = " << new_ptr << ", " << bh
                             << ", cs: " << gu::Hexdump(cs_new, sizeof(cs_new))
                             << ", previous ptr = " << old_ptr;

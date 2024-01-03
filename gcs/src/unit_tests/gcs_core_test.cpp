@@ -535,7 +535,7 @@ test_api(bool const enc)
 
     action_t act_s(act, NULL, NULL, act_size, GCS_ACT_WRITESET, -1,
                    GU_THREAD_INITIALIZER);
-    action_t act_r(act, NULL, NULL, -1, (gcs_act_type_t)-1, -1,
+    action_t act_r(act, NULL, NULL, -1, GCS_ACT_UNKNOWN, -1,
                    GU_THREAD_INITIALIZER);
     long i = 5;
 
@@ -652,7 +652,7 @@ CORE_TEST_OWN(bool const enc, int gcs_proto_ver)
 
     action_t act_s(act, NULL, NULL, act_size, GCS_ACT_WRITESET, -1,
                    GU_THREAD_INITIALIZER);
-    action_t act_r(act, NULL, NULL, -1, (gcs_act_type_t)-1, -1,GU_THREAD_INITIALIZER);
+    action_t act_r(act, NULL, NULL, -1, GCS_ACT_UNKNOWN, -1,GU_THREAD_INITIALIZER);
 
     // Create primary and non-primary component messages
     gcs_comp_msg_t* prim     = gcs_comp_msg_new (true, false,  0, 1, 0);

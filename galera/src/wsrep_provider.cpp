@@ -534,12 +534,8 @@ galera_terminate_trx(wsrep_t*           const gh,
         trx->set_state(TrxHandle::S_MUST_ABORT);
         trx->set_state(TrxHandle::S_ABORTING);
     }
-    wsrep_status_t retval(repl->send(*trx, meta));
-    if (retval == WSREP_OK)
-    {
-        retval = galera_sync_wait(gh, NULL, -1, NULL);
-    }
-    return retval;
+
+    return repl->terminate_trx(*trx, meta);
 }
 
 extern "C"
@@ -1002,14 +998,25 @@ wsrep_status_t galera_append_key(wsrep_t*           const gh,
 
     try
     {
+        int const proto_ver(repl->trx_proto_ver());
         TrxHandleLock lock(*trx);
-        for (size_t i(0); i < keys_num; ++i)
+
+        if (keys_num > 0)
         {
-            galera::KeyData k (repl->trx_proto_ver(),
-                               keys[i].key_parts,
-                               keys[i].key_parts_num,
-                               key_type,
-                               copy);
+            for (size_t i(0); i < keys_num; ++i)
+            {
+                galera::KeyData const k(proto_ver,
+                                        keys[i].key_parts,
+                                        keys[i].key_parts_num,
+                                        key_type,
+                                        copy);
+                gu_trace(trx->append_key(k));
+            }
+        }
+        else if (proto_ver >= 6)
+        {
+            /* Append server-level key (matches every trx)*/
+            galera::KeyData const k(proto_ver, key_type);
             gu_trace(trx->append_key(k));
         }
         retval = WSREP_OK;

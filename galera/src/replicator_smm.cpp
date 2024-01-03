@@ -140,6 +140,7 @@ galera::ReplicatorSMM::ReplicatorSMM(const struct wsrep_init_args* args)
     wsdb_               (),
     cert_               (config_, gcache_, &service_thd_),
     pending_cert_queue_ (gcache_),
+    write_set_waiters_  (),
     local_monitor_      (gu::GU_MUTEX_KEY_LOCAL_MONITOR,
                          gu::GU_COND_KEY_LOCAL_MONITOR),
     apply_monitor_      (gu::GU_MUTEX_KEY_APPLY_MONITOR,
@@ -276,6 +277,7 @@ void galera::ReplicatorSMM::shift_to_CLOSED()
     }
 
     closing_cond_.broadcast();
+    write_set_waiters_.interrupt_waiters();
 }
 
 void galera::ReplicatorSMM::wait_for_CLOSED(gu::Lock& lock)
@@ -641,6 +643,13 @@ wsrep_status_t galera::ReplicatorSMM::replicate(TrxHandleMaster& trx,
     assert(!(trx.flags() & TrxHandle::F_ROLLBACK));
     assert(trx.state() == TrxHandle::S_EXECUTING ||
            trx.state() == TrxHandle::S_MUST_ABORT);
+
+    if (trx.version() >= 6)
+    {
+        /* By default append zero-level key */
+        galera::KeyData const k(trx.version());
+        gu_trace(trx.append_key(k));
+    }
 
     if (state_() < S_JOINED || trx.state() == TrxHandle::S_MUST_ABORT)
     {
@@ -1123,6 +1132,25 @@ wsrep_status_t galera::ReplicatorSMM::replay_trx(TrxHandleMaster& trx,
     log_debug << "replaying failed for trx " << trx;
     assert(trx.state() == TrxHandle::S_ABORTING);
 
+    return retval;
+}
+
+wsrep_status_t galera::ReplicatorSMM::terminate_trx(TrxHandleMaster& trx,
+                                                    wsrep_trx_meta_t* meta)
+{
+    auto waiter(
+        write_set_waiters_.register_waiter(meta->stid.node, meta->stid.trx));
+    wsrep_status_t retval(send(trx, meta));
+    if (retval == WSREP_OK)
+    {
+        if (waiter->wait())
+        {
+            // wait was interrupted by shutdown,
+            // or non-prim configuration
+            retval = WSREP_CONN_FAIL;
+        }
+    }
+    write_set_waiters_.unregister_waiter(meta->stid.node, meta->stid.trx);
     return retval;
 }
 
@@ -2122,6 +2150,11 @@ void galera::ReplicatorSMM::process_trx(void* recv_ctx,
             }
 
             gu_trace(apply_trx(recv_ctx, ts));
+
+            if (ts.is_streaming_end())
+            {
+                write_set_waiters_.signal(ts.source_id(), ts.trx_id());
+            }
         }
         catch (std::exception& e)
         {
@@ -2155,7 +2188,14 @@ void galera::ReplicatorSMM::process_commit_cut(wsrep_seqno_t const seq,
     if (seq >= cc_seqno_) /* Refs #782. workaround for
                            * assert(seqno >= seqno_released_) in gcache. */
     {
+        if (state_() != S_SYNCED)
+        {
+            // make sure that all preceding actions committed
+            // when node is SYNCED seq can't exceed last_committed()
+            apply_monitor_.wait(seq);
+        }
         assert(seq <= last_committed());
+
         cert_.purge_trxs_upto(seq, true);
     }
 
@@ -2297,7 +2337,7 @@ galera::get_trx_protocol_versions(int proto_ver)
         record_set_ver = gu::RecordSet::VER1;
         break;
     case 6:
-        trx_ver  = 3;
+        trx_ver = 3;
         record_set_ver = gu::RecordSet::VER1;
         break;
     case 7:
@@ -2318,8 +2358,13 @@ galera::get_trx_protocol_versions(int proto_ver)
         break;
     case 10:
         // Protocol upgrade to enable support for:
-        trx_ver = 5;// PA range preset in the writeset,
-                                 // WSREP_KEY_UPDATE support (API v26)
+        trx_ver = 5; // PA range preset in the writeset,
+                     // WSREP_KEY_UPDATE support (API v26)
+        record_set_ver = gu::RecordSet::VER2;
+        break;
+    case 11:
+        // Protocol upgrade to enable support for:
+        trx_ver = 6; // zero-level key in the writeset
         record_set_ver = gu::RecordSet::VER2;
         break;
     default:
@@ -2533,6 +2578,8 @@ void galera::ReplicatorSMM::process_non_prim_conf_change(
             state_.shift_to(S_CONNECTED);
         }
     }
+
+    write_set_waiters_.interrupt_waiters();
 }
 
 static void validate_local_prim_view_info(const wsrep_view_info_t* view_info,

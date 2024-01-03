@@ -5,7 +5,7 @@ set -eux
 # $Id$
 
 # Galera library version
-VERSION="26.4.16"
+VERSION="26.4.17"
 
 get_cores()
 {
@@ -130,7 +130,7 @@ fi
 
 export CC CXX LD_LIBRARY_PATH
 
-CFLAGS=${CFLAGS:-"-O2"}
+CFLAGS=${CFLAGS:-}
 CXXFLAGS=${CXXFLAGS:-"$CFLAGS"}
 CPPFLAGS=${CPPFLAGS:-}
 
@@ -410,6 +410,7 @@ then
 elif [ "$CMAKE" == "yes" ] # Build using CMake
 then
     cmake_args="$CMAKE_OPTS -DGALERA_REVISION=$GALERA_REV"
+    cmake_args="$cmake_args -DCMAKE_C_FLAGS="\'"$CFLAGS"\'" -DCMAKE_CXX_FLAGS="\'"$CXXFLAGS"\'
     [ -n "$TARGET"        ] && \
         echo "WARN: TARGET=$TARGET ignored by CMake build"
     [ -n "$RELEASE"       ] && \
@@ -422,7 +423,7 @@ then
     then
         (cd $build_base && make clean) || :
         rm -f $build_base/CMakeCache.txt
-        cmake $cmake_args $build_base
+        eval cmake $cmake_args $build_base
     fi
 
     if [ "$SKIP_BUILD" != "yes" ]
