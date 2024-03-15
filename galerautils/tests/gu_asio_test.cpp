@@ -925,6 +925,8 @@ END_TEST
 #include <openssl/engine.h>
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
+#include <openssl/ssl.h>
+#include <openssl/opensslv.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <dirent.h>
@@ -987,6 +989,9 @@ static EVP_PKEY* create_key()
     BN_free(bn);
     return pkey;
 #else
+#if OPENSSL_VERSION_NUMBER < 0x30004000L
+    OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS, NULL);
+#endif
     auto* ret = EVP_RSA_gen(2048);
     if (!ret)
     {
@@ -2459,7 +2464,7 @@ Suite* gu_asio_suite()
     tc = tcase_create("test_tcp_get_tcp_info");
     tcase_add_test(tc, test_tcp_get_tcp_info);
     suite_add_tcase(s, tc);
-/*
+
 #ifdef GALERA_HAVE_SSL
     //
     // SSL
@@ -2547,7 +2552,7 @@ Suite* gu_asio_suite()
     suite_add_tcase(s, tc);
 
 #endif // GALERA_HAVE_SSL
-*/
+
     tc = tcase_create("test_client_handshake_want_read");
     tcase_add_test(tc, test_client_handshake_want_read);
     suite_add_tcase(s, tc);
