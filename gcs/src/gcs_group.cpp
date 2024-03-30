@@ -8,6 +8,7 @@
 #include "gcs_gcache.hpp"
 #include "gcs_priv.hpp"
 #include "gcs_code_msg.hpp"
+#include "gcs_error.hpp"
 
 #include <gu_logger.hpp>
 #include <gu_macros.hpp>
@@ -1170,15 +1171,16 @@ gcs_group_handle_join_msg  (gcs_group_t* group, const gcs_recv_msg_t* msg)
             }
         }
 
-        if (j == group->num) {
-            gu_warn ("Could not find peer: %s", peer_id);
+        if (j == group->num && strlen(peer_id)) {
+            /* This can happen if the 'peer' is no longer in group. */
+            gu_info ("Could not find peer: %s", peer_id);
         }
 
         if (code < 0) {
-            gu_warn ("%d.%d (%s): State transfer %s %d.%d (%s) failed: %d (%s)",
+            gu_warn ("%d.%d (%s): State transfer %s %d.%d (%s) failed: %s",
                      sender_idx, sender->segment, sender->name, st_dir,
                      peer_idx, peer ? peer->segment : -1, peer_name,
-                     (int)code, strerror((int)-code));
+                     gcs_state_transfer_error_str((int)-code));
 
             if (from_donor && peer_idx == group->my_idx &&
                 GCS_NODE_STATE_JOINER == group->nodes[peer_idx].status) {
@@ -1220,8 +1222,14 @@ gcs_group_handle_join_msg  (gcs_group_t* group, const gcs_recv_msg_t* msg)
             gu_warn("Rejecting JOIN message from %d.%d (%s): new State Transfer"
                     " required.", sender_idx, sender->segment, sender->name);
         }
-        else {
-            // should we freak out and throw an error?
+        else if (GCS_NODE_STATE_SYNCED != sender->status &&
+                 GCS_NODE_STATE_JOINED != sender->status) {
+            /* According to comments in gcs_join(), sending of JOIN messages
+             * is always allowed when not in JOINER state. This may lead to
+             * duplicate joins of which some can be received in JOINED or
+             * SYNCED state. This is expected, so the warning is not printed if
+             * the state is JOINED or SYNCED, but we'll keep it for other
+             * states to catch possible errors in sender logic. */
             gu_warn("Protocol violation. JOIN message sender %d.%d (%s) is not "
                     "in state transfer (%s). Message ignored.",
                     sender_idx, sender->segment, sender->name,
@@ -1325,7 +1333,7 @@ group_find_node_by_state (const gcs_group_t* const group,
     /* Have not found suitable donor in the same segment. */
     if (!hnss && donor >= 0) {
         if (joiner_idx == group->my_idx) {
-            gu_warn ("There are no nodes in the same segment that will ever "
+            gu_info ("There are no nodes in the same segment that will ever "
                      "be able to become donors, yet there is a suitable donor "
                      "outside. Will use that one.");
         }
@@ -1667,7 +1675,6 @@ gcs_group_find_donor(const gcs_group_t* group,
     return donor_idx;
 }
 
-
 /*!
  * Selects and returns the index of state transfer donor, if available.
  * Updates donor and joiner status if state transfer is possible
@@ -1743,12 +1750,24 @@ group_select_donor (gcs_group_t* group,
             assert(true == desync);
         }
     }
-    else {
-        gu_warn ("Member %d.%d (%s) requested state transfer from '%s', "
-                 "but it is impossible to select State Transfer donor: %s",
-                 joiner_idx, group->nodes[joiner_idx].segment,
-                 group->nodes[joiner_idx].name,
-                 required_donor ? donor_string : "*any*", strerror (-donor_idx));
+    else if (-donor_idx == EAGAIN) {
+        /* In case of EAGAIN the failure of selecting the donor is
+         * transient, and donor selection may succeed when the request is
+         * retried by the Joiner. Therefore print info level message
+         * instead of warning. */
+        gu_info("Member %d.%d (%s) requested state transfer from '%s', "
+                "but it is impossible to select State Transfer donor: %s",
+                joiner_idx, group->nodes[joiner_idx].segment,
+                group->nodes[joiner_idx].name,
+                required_donor ? donor_string : "*any*",
+                gcs_state_transfer_error_str(-donor_idx));
+    } else {
+        gu_warn("Member %d.%d (%s) requested state transfer from '%s', "
+                "but it is impossible to select State Transfer donor: %s",
+                joiner_idx, group->nodes[joiner_idx].segment,
+                group->nodes[joiner_idx].name,
+                required_donor ? donor_string : "*any*",
+                gcs_state_transfer_error_str(-donor_idx));
     }
 
     return donor_idx;

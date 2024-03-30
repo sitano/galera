@@ -15,6 +15,7 @@
 #include "gcs_backend.hpp"
 #include "gcs_comp_msg.hpp"
 #include "gcs_code_msg.hpp"
+#include "gcs_error.hpp"
 #include "gcs_fifo_lite.hpp"
 #include "gcs_group.hpp"
 #include "gcs_gcache.hpp"
@@ -665,7 +666,7 @@ core_handle_act_msg (gcs_core_t*          core,
     }
     else {
         /* Non-primary conf, foreign message - ignore */
-        gu_warn ("Action message in non-primary configuration from "
+        gu_info ("Action message in non-primary configuration from "
                  "member %d", msg->sender_idx);
         ret = 0;
     }
@@ -838,11 +839,25 @@ core_handle_comp_msg (gcs_core_t*          const core,
                                           &uuid,
                                           sizeof(uuid),
                                           GCS_MSG_STATE_UUID);
-                if (ret < 0) {
+                if (ret < 0)
+                {
                     // if send() failed, it means new configuration change
                     // is on the way. Probably should ignore.
-                    gu_warn ("Failed to send state UUID: %ld (%s)",
-                             ret, strerror (-ret));
+                    switch (-ret)
+                    {
+                    case EAGAIN:
+                        gu_info("Temporary failure in sending state UUID, "
+                                "will try again in next primary component");
+                        break;
+                    case ENOTCONN:
+                        gu_info("Failed to send state UUID: Connection to "
+                                "cluster was closed");
+                        break;
+                    default:
+                        gu_warn("Failed to send state UUID: %zd (%s)", ret,
+                                gcs_error_str(-ret));
+                        break;
+                    }
                 }
                 else {
                     gu_info ("STATE_EXCHANGE: sent state UUID: "
@@ -1133,7 +1148,10 @@ core_msg_to_action (gcs_core_t*          core,
         }
     }
     else {
-        gu_warn ("%s message from member %d in non-primary configuration. "
+        /* Messages which were sent just before cluster partitioning may
+         * be delivered in the following non-primary configuration. This
+         * is expected behavior, so info log level is enough. */
+        gu_info ("%s message from member %d in non-primary configuration. "
                  "Ignored.", gcs_msg_type_string[msg->type], msg->sender_idx);
     }
 

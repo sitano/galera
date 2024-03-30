@@ -370,7 +370,7 @@ void GCommConn::connect(string channel, bool const bootstrap)
     if ((err = gu_thread_create(
              &thd_, 0, run_fn, this)) != 0)
     {
-        gu_throw_error(err) << "Failed to create thread";
+        gu_throw_system_error(err) << "Failed to create thread";
     }
 
     thread_set_schedparam(thd_, schedparam_);
@@ -585,7 +585,7 @@ static void fill_cmp_msg(const View& view, const gcomm::UUID& my_uuid,
                                      i->second.segment());
         if (ret < 0) {
             gu_throw_error(-ret) << "Failed to add member '" << uuid
-                                 << "' to component message.";
+                                 << "' to component message: " << -ret;
         }
 
         if (uuid == my_uuid)
@@ -868,7 +868,7 @@ GCS_BACKEND_STATUS_GET_FN(gcomm_status_get)
     GCommConn::Ref ref(backend);
     if (ref.get() == 0)
     {
-        gu_throw_error(-EBADFD);
+        gu_throw_error(-EBADFD) << "Could not get status from gcomm backend";
     }
 
     GCommConn& conn(*ref.get());
