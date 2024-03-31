@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2013-2021 Codership Oy <info@codership.com>
+// Copyright (C) 2013-2024 Codership Oy <info@codership.com>
 //
 
 #include "key_set.hpp"
@@ -219,7 +219,7 @@ static inline bool
 key_prefix_is_stronger_than(int const left,
                             int const right)
 {
-    return left > right; // for now key prefix is numerically ordered
+    return left > right;
 }
 
 KeySetOut::KeyPart::KeyPart (KeyParts&      added,
@@ -247,11 +247,12 @@ KeySetOut::KeyPart::KeyPart (KeyParts&      added,
 
     hash_.gather<sizeof(hd.buf)>(hd.buf);
 
-    /* only leaf part of the key can be not WSREP_KEY_SHARED */
+    /* only leaf part of the key can be not of branch type */
     bool const leaf (part_num + 1 == kd.parts_num);
     wsrep_key_type_t const type (leaf ? kd.type : KeyData::BRANCH_KEY_TYPE);
     int const prefix (KeySet::KeyPart::prefix(type, ws_ver));
 
+//    log_info << "Part " << part_num +1 << '/' << kd.parts_num << ": leaf: " << leaf << ", kd.type: " << kd.type << ", type: " << type << ", prefix: " << prefix;
     assert (kd.parts_num > part_num);
 
     KeySet::KeyPart kp(ts, hd, kd.parts, ver_, prefix, part_num, alignment);
@@ -374,21 +375,28 @@ KeySetOut::append (const KeyData& kd)
     }
 //    log_info << "matched " << i << " parts";
 
-    int const kd_leaf_prefix(KeySet::KeyPart::prefix(kd.type, ws_ver_));
-
     /* if we have a fully matched key OR common ancestor is stronger, return */
     if (i > 0)
     {
         assert (size_t(i) < prev_.size());
 
+        int const kd_leaf_prefix(KeySet::KeyPart::prefix(kd.type, ws_ver_));
+        int const branch_prefix
+            (KeySet::KeyPart::prefix(KeyData::BRANCH_KEY_TYPE, ws_ver_));
         int const exclusive_prefix
             (KeySet::KeyPart::prefix(WSREP_KEY_EXCLUSIVE, ws_ver_));
 
-        if (key_prefix_is_stronger_than(prev_[i].prefix(), kd_leaf_prefix) ||
+        if ((key_prefix_is_stronger_than(prev_[i].prefix(), kd_leaf_prefix) &&
+             // If prev_[i].prefix is branch_prefix require i to correspond to
+             // kd leaf. If it is only a branch then leaf wins.
+             (prev_[i].prefix() > branch_prefix || kd.parts_num == i)) ||
             prev_[i].prefix() == exclusive_prefix)
         {
-//            log_info << "Returning after matching a stronger key:\n"<<prev_[i];
-            assert (prev_.size() == (i + 1U)); // only leaf can be exclusive.
+//            log_info << "Returning after matching a stronger key:\n"
+//                     << prev_[i] << " > " << kd;
+            // only leaf can be stronger than a branch
+            assert (prev_.size() == (i + 1U) ||
+                    prev_[i].prefix() <= branch_prefix);
             return 0;
         }
 
@@ -399,7 +407,9 @@ KeySetOut::append (const KeyData& kd)
 
             if (prev_[i].prefix() == kd_leaf_prefix)
             {
-//                log_info << "Returning after matching all " << i << " parts";
+//                log_info << "Returning after matching all " << i
+//                         << " parts: prev: " << prev_[i].prefix()
+//                         << ", next: " << kd_leaf_prefix;
                 return 0;
             }
             else /* need to add a stronger copy of the leaf */
@@ -442,7 +452,7 @@ KeySetOut::append (const KeyData& kd)
                 tmp = kp; // <- updating parent for next iteration
 #endif /* CHECK_PREVIOUS_KEY */
 
-//            log_info << "pushed " << kp;
+//            log_info << "pushed " << i << ": " << kp << ", prefix: " << kp.prefix();
         }
         catch (KeyPart::DUPLICATE& e)
         {

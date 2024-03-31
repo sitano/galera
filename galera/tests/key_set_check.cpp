@@ -1,4 +1,4 @@
-/* copyright (C) 2013-2020 Codership Oy <info@codership.com>
+/* copyright (C) 2013-2024 Codership Oy <info@codership.com>
  *
  * $Id$
  */
@@ -73,8 +73,9 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     TestKey tk1(tk_ver, WSREP_KEY_SHARED, true, "a0", "a1", "a2");
     mark_point();
     kso.append(tk1());
-    ck_assert_msg(kso.count() == 3, "key count: expected 3, got %d",
-                  kso.count());
+    int expected_count(3);
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
 
     total_size += base_size + 2 + 2*4;
     total_size = GU_ALIGN(total_size, alignment);
@@ -85,19 +86,24 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
 
     TestKey tk2(tk_ver, WSREP_KEY_EXCLUSIVE, false, "a0", "a1", "b2");
     kso.append(tk2());
-    ck_assert_msg(kso.count() == 4, "key count: expected 4, got %d",
-                  kso.count());
+    expected_count += (ws_ver > 3);
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
 
-    total_size += base_size + 2 + 3*4;
-    total_size = GU_ALIGN(total_size, alignment);
+    if (expected_count == 4)
+    {
+        total_size += base_size + 2 + 3*4;
+        total_size = GU_ALIGN(total_size, alignment);
+    }
     ck_assert_msg(total_size == kso.size(), "Size: %zu, expected: %zu",
                   kso.size(), total_size);
 
     /* this should update a sronger version of "a2" */
-    TestKey tk2_(tk_ver, WSREP_KEY_REFERENCE, false, "a0", "a1", "a2");
+    TestKey tk2_(tk_ver, WSREP_KEY_UPDATE, false, "a0", "a1", "a2");
     kso.append(tk2_());
-    ck_assert_msg(kso.count() == 5, "key count: expected 5, got %d",
-                  kso.count());
+    expected_count += 1;
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
 
     total_size += base_size + 2 + 3*4;
     total_size = GU_ALIGN(total_size, alignment);
@@ -108,12 +114,16 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     TestKey tk3(tk_ver, WSREP_KEY_EXCLUSIVE, true, "a0", "a1");
     log_info << "######## Appending exclusive duplicate tk3: begin";
     kso.append(tk3());
+    expected_count += (ws_ver <= 3 ? 0 : 1);
     log_info << "######## Appending exclusive duplicate tk3: end";
-    ck_assert_msg(kso.count() == 6, "key count: expected 6, got %d",
-                  kso.count());
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
 
-    total_size += base_size + 2 + 2*4;
-    total_size = GU_ALIGN(total_size, alignment);
+    if (ws_ver > 3)
+    {
+        total_size += base_size + 2 + 2*4;
+        total_size = GU_ALIGN(total_size, alignment);
+    }
     ck_assert_msg(total_size == kso.size(), "Size: %zu, expected: %zu",
                   kso.size(), total_size);
 
@@ -122,8 +132,8 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     log_info << "######## Appending exclusive duplicate tk4: begin";
     kso.append(tk4());
     log_info << "######## Appending exclusive duplicate tk4: end";
-    ck_assert_msg(kso.count() == 6, "key count: expected 6, got %d",
-                  kso.count());
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
 
     ck_assert_msg(total_size == kso.size(), "Size: %zu, expected: %zu",
                   kso.size(), total_size);
@@ -131,8 +141,8 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     /* adding shared key should have no effect */
     TestKey tk5(tk_ver, WSREP_KEY_SHARED, true, "a0", "a1");
     kso.append(tk5());
-    ck_assert_msg(kso.count() == 6, "key count: expected 6, got %d",
-                  kso.count());
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
 
     ck_assert_msg(total_size == kso.size(), "Size: %zu, expected: %zu",
                   kso.size(), total_size);
@@ -140,8 +150,8 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     /* adding REFERENCE key should have no effect */
     TestKey tk5_1(tk_ver, WSREP_KEY_REFERENCE, true, "a0", "a1");
     kso.append(tk5_1());
-    ck_assert_msg(kso.count() == 6, "key count: expected 6, got %d",
-                  kso.count());
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
 
     ck_assert_msg(total_size == kso.size(), "Size: %zu, expected: %zu",
                   kso.size(), total_size);
@@ -149,8 +159,8 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     /* adding UPDATE key should have no effect */
     TestKey tk5_2(tk_ver, WSREP_KEY_UPDATE, true, "a0", "a1");
     kso.append(tk5_2());
-    ck_assert_msg(kso.count() == 6, "key count: expected 6, got %d",
-                  kso.count());
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
 
     ck_assert_msg(total_size == kso.size(), "Size: %zu, expected: %zu",
                   kso.size(), total_size);
@@ -158,8 +168,8 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     /* tk5 should not make any changes */
     TestKey tk6(tk_ver, WSREP_KEY_EXCLUSIVE, false, "a0", "a1", "c2");
     kso.append(tk6());
-    ck_assert_msg(kso.count() == 6, "key count: expected 6, got %d",
-                  kso.count());
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
 
     ck_assert_msg(total_size == kso.size(), "Size: %zu, expected: %zu",
                   kso.size(), total_size);
@@ -167,8 +177,9 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     /* a0:b1:... should still be possible, should add 2 keys: b1 and c2 */
     TestKey tk7(tk_ver, WSREP_KEY_REFERENCE, true, "a0", "b1", "c2");
     kso.append(tk7());
-    ck_assert_msg(kso.count() == 8, "key count: expected 8, got %d",
-                  kso.count());
+    expected_count += 2;
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
 
     total_size += base_size + 2 + 2*4;
     total_size = GU_ALIGN(total_size, alignment);
@@ -181,15 +192,18 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
      * (should be no collision on b2) */
     TestKey tk8(tk_ver, WSREP_KEY_REFERENCE, false, "a0", "b1", "b2");
     kso.append(tk8());
-    ck_assert_msg(kso.count() == 9, "key count: expected 9, got %d",
-                  kso.count());
+    expected_count += (ws_ver > 3);
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
 
-    total_size += base_size + 2 + 3*4;
-    total_size = GU_ALIGN(total_size, alignment);
+    if (ws_ver > 3)
+    {
+        total_size += base_size + 2 + 3*4;
+        total_size = GU_ALIGN(total_size, alignment);
+    }
     ck_assert_msg(total_size == kso.size(), "Size: %zu, expected: %zu",
                   kso.size(), total_size);
 
-    int expected_count(kso.count());
     TestKey tk8_1(tk_ver, WSREP_KEY_UPDATE, false, "a0", "b1", "b2");
     kso.append(tk8_1());
     if (3 == ws_ver || 4 == ws_ver)
@@ -208,8 +222,7 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     }
     else abort();
 
-    ck_assert_msg(kso.count() == expected_count,
-                  "key count: expected %d, got %d",
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
                   expected_count, kso.count());
     ck_assert_msg(total_size == kso.size(), "Size: %zu, expected: %zu",
                   kso.size(), total_size);
@@ -242,8 +255,7 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     kso.append(tk8_3());
     /* UPDATE key is weaker than EXCLUSIVE, should be ignored */
 
-    ck_assert_msg(kso.count() == expected_count,
-                  "key count: expected %d, got %d",
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
                   expected_count, kso.count());
     ck_assert_msg(total_size == kso.size(), "Size: %zu, expected: %zu",
                   kso.size(), total_size);
@@ -269,6 +281,31 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
                   kso.size(), total_size);
 
     log_info << "End size: " << kso.size();
+
+    // Verify that SHARED keys are added as a first leaf bunt not over REFERENCE
+    TestKey tk10_ref1(tk_ver, WSREP_KEY_REFERENCE, true, "s0");
+    kso.append(tk10_ref1());
+    expected_count += 1;
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
+    // Should add SHARED even though s1 weaker than s0 (for ver > 3)
+    TestKey tk10_sh(tk_ver, WSREP_KEY_SHARED, true, "s0", "s1");
+    kso.append(tk10_sh());
+    expected_count += (ws_ver > 3); // at ver<=3 REF is considered EXC
+    assert(kso.count() == expected_count);
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
+    TestKey tk10_ref2(tk_ver, WSREP_KEY_REFERENCE, true, "s0", "s1");
+    kso.append(tk10_ref2());
+    expected_count += (ws_ver > 3);
+    assert(kso.count() == expected_count);
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
+    // Try same SHARED once again, should not add anything
+    kso.append(tk10_sh());
+    ck_assert_msg(kso.count() == expected_count, "key count: expected %d, got %d",
+                  expected_count, kso.count());
+
 
     KeySetOut::GatherVector out;
     out->reserve(kso.page_count());
@@ -304,14 +341,14 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
         ck_abort_msg("%s", e.what());
     }
 
-    int shared(0); // to stiffle clang complaints about unused variables
+    int branch(0); // to stiffle clang complaints about unused variables
 
-    int const P_SHARED(KeySet::KeyPart::prefix(WSREP_KEY_SHARED, ws_ver));
+    int const P_BRANCH(KeySet::KeyPart::prefix(KeyData::BRANCH_KEY_TYPE,ws_ver));
 
     for (int i(0); i < ksi.count(); ++i)
     {
         KeySet::KeyPart kp(ksi.next());
-        shared += (kp.prefix() == P_SHARED);
+        branch += (kp.prefix() == P_BRANCH);
     }
 
     KeySetIn ksi_empty;
@@ -342,7 +379,7 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     for (int i(0); i < ksi_empty.count(); ++i)
     {
         KeySet::KeyPart kp(ksi_empty.next());
-        shared += (kp.prefix() == P_SHARED);
+        branch += (kp.prefix() == P_BRANCH);
     }
 
     ksi_empty.rewind();
@@ -350,10 +387,10 @@ static void test_ver(gu::RecordSet::Version const rsv, int const ws_ver)
     for (int i(0); i < ksi_empty.count(); ++i)
     {
         KeySet::KeyPart kp(ksi_empty.next());
-        shared += (kp.prefix() == P_SHARED);
+        branch += (kp.prefix() == P_BRANCH);
     }
 
-    ck_assert(0 != shared);
+    ck_assert(0 != branch);
 }
 
 #ifndef GALERA_ONLY_ALIGNED

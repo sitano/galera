@@ -79,10 +79,10 @@ void galera::WriteSet::append_key(const KeyData& kd)
     KeyOS key (kd.proto_ver,
                kd.parts,
                kd.parts_num,
-               (kd.shared() ? galera::KeyOS::F_SHARED : 0)
+               (kd.deprecated() ? galera::KeyOS::F_SHARED : 0)
                );
 
-    if (kd.shared())
+    if (kd.deprecated())
         assert(key.flags() & galera::KeyOS::F_SHARED);
     else
         assert(!(key.flags() & galera::KeyOS::F_SHARED));

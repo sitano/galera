@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2015-2021 Codership Oy <info@codership.com>
+// Copyright (C) 2015-2024 Codership Oy <info@codership.com>
 //
 
 #include "replicator_smm.hpp" // ReplicatorSMM::InitConfig
@@ -92,6 +92,13 @@ void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version)
 
     for (size_t i(0); i < nws; ++i)
     {
+        log_info << "%%%%%%%% Processing WS: " << i << " ver: " << version
+                 << " l: " << wsi[i].local_seqno
+                 << " g: " << wsi[i].global_seqno
+                 << " s: " << wsi[i].last_seen_seqno
+                 << " leaf: " << (wsi[i].shared ?
+                                  WSREP_KEY_REFERENCE : WSREP_KEY_EXCLUSIVE)
+                 << " base: " << wsi[i].zero_level;
         galera::TrxHandleMasterPtr trx(galera::TrxHandleMaster::New(
                                            mp,
                                            trx_params,
@@ -104,19 +111,19 @@ void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version)
             galera::KeyData(version,
                             wsi[i].key,
                             wsi[i].iov_len,
-                            (wsi[i].shared ? WSREP_KEY_SHARED :
+                            (wsi[i].shared ? galera::KeyData::BRANCH_KEY_TYPE :
                              WSREP_KEY_EXCLUSIVE),
                             true));
 
         if (version >= 6) // version from which zero-level keys were introduced
         {
-            if (WSREP_KEY_SHARED != wsi[i].zero_level)
+            if (galera::KeyData::BRANCH_KEY_TYPE != wsi[i].zero_level)
             {
                 trx->append_key(galera::KeyData(version, wsi[i].zero_level));
             }
 
-            // this is always added last in ReplicatorSMM::replicate()
-            trx->append_key(galera::KeyData(version, WSREP_KEY_SHARED));
+            // this is always called last in ReplicatorSMM::replicate()
+            trx->append_key(galera::KeyData(version));
         }
 
         if (wsi[i].data_len)
@@ -147,13 +154,15 @@ void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version)
         ck_assert(ts->unserialize<true>(act) == size);
 
         galera::Certification::TestResult result(cert.append_trx(ts));
+        // assert(result == wsi[i].result);
         ck_assert_msg(result == wsi[i].result,
-                      "g: %" PRId64 " res: %d exp: %d",
-                      ts->global_seqno(), result, wsi[i].result);
+                      "g: %" PRId64 " res: %d exp: %d, version: %d",
+                      ts->global_seqno(), result, wsi[i].result, version);
         ck_assert_msg(ts->depends_seqno() == wsi[i].expected_depends_seqno,
-                      "wsi: %zu g: %" PRId64 " ld: %" PRId64 " eld: %" PRId64,
+                      "wsi: %zu g: %" PRId64 " ld: %" PRId64 " eld: %" PRId64
+                      ", version: %d",
                       i, ts->global_seqno(), ts->depends_seqno(),
-                      wsi[i].expected_depends_seqno);
+                      wsi[i].expected_depends_seqno, version);
         cert.set_trx_committed(*ts);
 
         if (ts->nbo_end() && ts->ends_nbo() != WSREP_SEQNO_UNDEFINED)
@@ -163,11 +172,9 @@ void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version)
     }
 }
 
-
-START_TEST(test_certification_trx_v3)
+START_TEST(test_certification_trx_v4)
 {
-
-    const int version(3);
+    const int version(4);
     using galera::Certification;
     using galera::TrxHandle;
     using galera::void_cast;
@@ -206,7 +213,7 @@ START_TEST(test_certification_trx_v3)
         // 5: depends on 4
         { { {2, } }, 1, 5,
           { {void_cast("1"), 1}, {void_cast("1"), 1}, {void_cast("1"), 1} }, 3, false,
-          5, 5, 0, 4, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
+          5, 5, 4, 4, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           galera::KeyData::BRANCH_KEY_TYPE,
           Certification::TEST_OK, {0}, 0},
         // 6 - 8: exclusive - shared
@@ -272,16 +279,16 @@ START_TEST(test_certification_trx_v3)
 }
 END_TEST
 
-START_TEST(test_certification_trx_different_level_v3)
+START_TEST(test_certification_trx_different_level_v4)
 {
-    const int version(3);
+    const int version(4);
     using galera::Certification;
     using galera::TrxHandle;
     using galera::void_cast;
 
     //
     // Test the following cases:
-    // 1) exclusive (k1, k2, k3) <-> exclusive (k1, k2) -> dependency
+    // 1) exclusive (k1, k2, k3) <-> exclusive (k1, k2) -> conflict
     // 2) exclusive (k1, k2) <-> exclusive (k1, k2, k3) -> conflict
     //
     WSInfo wsi[] = {
@@ -295,11 +302,11 @@ START_TEST(test_certification_trx_different_level_v3)
           { {void_cast("1"), 1}, {void_cast("1"), 1} }, 2, false,
           2, 2, 0, 1, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           galera::KeyData::BRANCH_KEY_TYPE,
-          Certification::TEST_OK, {0}, 0},
+          Certification::TEST_FAILED, {0}, 0},
         // 2)
         { { {2, } }, 2, 2,
           { {void_cast("1"), 1}, {void_cast("1"), 1} }, 2, false,
-          3, 3, 2, 2, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
+          3, 3, 2, 1, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           galera::KeyData::BRANCH_KEY_TYPE,
           Certification::TEST_OK, {0}, 0},
         { { {1, } }, 1, 1,
@@ -470,7 +477,7 @@ END_TEST
 
 START_TEST(test_certification_commit_fragment)
 {
-    const int version(3);
+    const int version(4);
     using galera::Certification;
     using galera::TrxHandle;
     using galera::void_cast;
@@ -528,13 +535,12 @@ START_TEST(test_certification_zero_level)
     using galera::TrxHandle;
     using galera::void_cast;
 
-    // Interaction of a zero-level non-SHARED key with "regular" transactions
-    // "Regular" transaction has a zero-level key SHARED, so regarless of TOI or
-    // non-TOI, shared or exclusive, it shall interact as a SHARED key trx:
+    // Interaction of a zero-level non-REFERENCE key with "regular" transactions
+    // "Regular" transaction has a zero-level key, so regarless of TOI or
+    // non-TOI, shared or exclusive, it shall interact as a REFERENCE key trx:
     // conflict:
-    // * SHARED,EXCLUSIVE - EXCLUSIVE depends on SHARED
-    // * EXCLUSIVE,SHARED - SHARED conflicts with EXCLUSIVE (except for TOI
-    // which depends)
+    // * REFERENCE,EXCLUSIVE - EXCLUSIVE conflicts with REFERENCE
+    // * EXCLUSIVE,REFERENCE - REFERENCE conflicts with EXCLUSIVE
     WSInfo wsi[] = {
         // 1: no dependencies
         { { {1, } }, 1, 1,
@@ -542,13 +548,13 @@ START_TEST(test_certification_zero_level)
           1, 1, 0, 0, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           galera::KeyData::BRANCH_KEY_TYPE,
           Certification::TEST_OK, {0}, 0},
-        // 2: exclusive zero-level depends on 1
+        // 2: exclusive zero-level same source depends on 1
         { { {1, } }, 1, 2,
           {}, 0, true,
           2, 2, 0, 1, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           WSREP_KEY_EXCLUSIVE,
-          Certification::TEST_OK , {0}, 0},
-        // 3: shared last seen 1 - conflict with 2
+          Certification::TEST_OK, {0}, 0},
+        // 3: default zero-level last seen 1 - conflict with 2
         { { {2, } }, 1, 3,
           { {void_cast("1"), 1}, {void_cast("1"), 1}, {void_cast("1"), 1} }, 3, true,
           3, 3, 1, 2, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
@@ -561,33 +567,33 @@ START_TEST(test_certification_zero_level)
           galera::KeyData::BRANCH_KEY_TYPE,
           Certification::TEST_OK, {0}, 0},
         // 5: exclusive depends on 4, conflicts with 2
-        { { {2, } }, 1, 5,
+        { { {1, } }, 1, 5,
           { {void_cast("1"), 1}, {void_cast("1"), 1}, {void_cast("1"), 1} }, 3, false,
           5, 5, 0, 4, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           galera::KeyData::BRANCH_KEY_TYPE,
           Certification::TEST_FAILED, {0}, 0},
-        // 6: shared depends but does not conflict with 2 because from the same source
+        // 6: reference depends but does not conflict with 2 because same source
         { { {1, } }, 1, 6,
           { {void_cast("1"), 1}, {void_cast("1"), 1}, {void_cast("1"), 1} }, 3, true,
           6, 6, 1, 2, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           galera::KeyData::BRANCH_KEY_TYPE,
           Certification::TEST_OK, {0}, 0},
-        // 7: exclusive, saw 2, depends on 6
+        // 7: exclusive, saw 2, conflicts with 6
         { { {2, } }, 1, 7,
           { {void_cast("1"), 1}, {void_cast("1"), 1}, {void_cast("1"), 1} }, 3, false,
           7, 7, 2, 6, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           galera::KeyData::BRANCH_KEY_TYPE,
-          Certification::TEST_OK, {0}, 0},
-        // 8: exclusive zero-level depends on exclusive 7
+          Certification::TEST_FAILED, {0}, 0},
+        // 8: exclusive zero-level depends on 6 because same source
         { { {1, } }, 1, 8,
           {}, 0, true,
-          8, 8, 4, 7, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
+          8, 8, 4, 6, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           WSREP_KEY_EXCLUSIVE,
           Certification::TEST_OK, {0}, 0},
         // 9: exclusive zero-level conflicts with exclusive zero-level 8
         { { {2, } }, 1, 9,
           {}, 0, true,
-          9, 9, 0, 8, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
+          9, 9, 6, 8, TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           WSREP_KEY_EXCLUSIVE,
           Certification::TEST_FAILED, {0}, 0},
         // TOI 1 depends on zero-level 8
@@ -604,14 +610,13 @@ START_TEST(test_certification_zero_level)
           TrxHandle::F_ISOLATION | TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           galera::KeyData::BRANCH_KEY_TYPE,
           Certification::TEST_OK, {0}, 0},
-        // zero-level 12 from the different source only depends on TOI 2
-        // becaused it is EXCLUSIVE over SHARED
+        // zero-level 12 from the different source conflicts with TOI 2
         { { {2, } }, 3, 3,
           {}, 0, true,
           12, 12, 10, 11,
           TrxHandle::F_BEGIN | TrxHandle::F_COMMIT,
           WSREP_KEY_EXCLUSIVE,
-          Certification::TEST_OK, {0}, 0},
+          Certification::TEST_FAILED, {0}, 0},
     };
 
     size_t nws(sizeof(wsi)/sizeof(wsi[0]));
@@ -626,20 +631,16 @@ Suite* certification_suite()
     Suite* s(suite_create("certification"));
     TCase* t;
 
-    t = tcase_create("certification_trx_v3");
-    tcase_add_test(t, test_certification_trx_v3);
+    t = tcase_create("certification_trx_v4");
+    tcase_add_test(t, test_certification_trx_v4);
     suite_add_tcase(s, t);
 
     t = tcase_create("certification_toi_v3");
     tcase_add_test(t, test_certification_toi_v3);
     suite_add_tcase(s, t);
 
-    t = tcase_create("certification_trx_different_level_v3");
-    tcase_add_test(t, test_certification_trx_different_level_v3);
-    suite_add_tcase(s, t);
-
-    t = tcase_create("certification_toi_v3");
-    tcase_add_test(t, test_certification_toi_v3);
+    t = tcase_create("certification_trx_different_level_v4");
+    tcase_add_test(t, test_certification_trx_different_level_v4);
     suite_add_tcase(s, t);
 
     t = tcase_create("certification_nbo");
