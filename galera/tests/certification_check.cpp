@@ -9,6 +9,7 @@
 #include "GCache.hpp"
 #include "gu_config.hpp"
 #include "gu_inttypes.hpp"
+#include "test_key.hpp"
 
 #include <check.h>
 
@@ -154,7 +155,6 @@ void run_wsinfo(const WSInfo* const wsi, size_t const nws, int const version)
         ck_assert(ts->unserialize<true>(act) == size);
 
         galera::Certification::TestResult result(cert.append_trx(ts));
-        // assert(result == wsi[i].result);
         ck_assert_msg(result == wsi[i].result,
                       "g: %" PRId64 " res: %d exp: %d, version: %d",
                       ts->global_seqno(), result, wsi[i].result, version);
@@ -626,6 +626,863 @@ START_TEST(test_certification_zero_level)
 }
 END_TEST
 
+using CertResult = galera::Certification::TestResult;
+struct CertFixture
+{
+    gu::Config conf{};
+    struct InitConf
+    {
+        galera::ReplicatorSMM::InitConfig init;
+        InitConf(gu::Config& conf) : init(conf, NULL, NULL)
+        {
+            conf.set("gcache.name", "cert_fixture.cache");
+            conf.set("gcache.size", "1M");
+        }
+    } init_conf{conf};
+
+    galera::TrxHandleMaster::Pool mp{ sizeof(galera::TrxHandleMaster)
+                                          + sizeof(galera::WriteSetOut),
+                                      16, "certification_mp" };
+    galera::TrxHandleSlave::Pool sp{ sizeof(galera::TrxHandleSlave), 16,
+                                     "certification_sp" };
+
+    galera::ProgressCallback<int64_t> gcache_pcb{WSREP_MEMBER_UNDEFINED,
+        WSREP_MEMBER_UNDEFINED};
+    gcache::GCache gcache{&gcache_pcb, conf, "."};
+    galera::Certification cert{conf, 0};
+    int version = galera::WriteSetNG::MAX_VERSION;
+    CertFixture() {
+        cert.assign_initial_position(gu::GTID(), version);
+    }
+
+    wsrep_uuid_t node1{{1, }};
+    wsrep_uuid_t node2{{2, }};
+
+    wsrep_conn_id_t conn1{1};
+    wsrep_conn_id_t conn2{2};
+
+    wsrep_trx_id_t cur_trx_id{0};
+    wsrep_seqno_t cur_seqno{0};
+
+    struct CfCertResult {
+        CertResult result;
+        galera::TrxHandleSlavePtr ts;
+    };
+
+    CfCertResult append(const wsrep_uuid_t& node, wsrep_conn_id_t conn,
+                        wsrep_seqno_t last_seen,
+                        const std::vector<const char*>& key,
+                        wsrep_key_type_t type, int flags,
+                        const gu::byte_t* data_buf, size_t data_buf_len)
+    {
+        galera::TrxHandleMasterPtr txm{ galera::TrxHandleMaster::New(
+                                            mp,
+                                            galera::TrxHandleMaster::Params{
+                                                "", version,
+                                                galera::KeySet::MAX_VERSION },
+                                            node, conn, cur_trx_id),
+                                        galera::TrxHandleMasterDeleter{} };
+        txm->set_flags(flags);
+        TestKey tkey{ txm->version(), type, key };
+        txm->append_key(tkey());
+        if (data_buf)
+        {
+            txm->append_data(data_buf, data_buf_len, WSREP_DATA_ORDERED, false);
+        }
+        galera::WriteSetNG::GatherVector out;
+        size_t size = txm->write_set_out().gather(
+            txm->source_id(), txm->conn_id(), txm->trx_id(), out);
+        txm->finalize(last_seen);
+        gu::byte_t* buf = static_cast<gu::byte_t*>(gcache.malloc(size));
+        ck_assert(out.serialize(buf, size) == size);
+        ++cur_seqno;
+        gcs_action act = { cur_seqno, cur_seqno, buf,
+                           static_cast<int32_t>(size), GCS_ACT_WRITESET };
+        galera::TrxHandleSlavePtr ts(galera::TrxHandleSlave::New(false, sp),
+                                     galera::TrxHandleSlaveDeleter{});
+        ck_assert(ts->unserialize<true>(act) == size);
+        auto result = cert.append_trx(ts);
+        /* Mark committed here to avoid doing it in every test case. If the
+         * ts is not marked as committed, the certification destructor will
+         * assert during cleanup. */
+        ts->mark_committed();
+        return { result, ts };
+    }
+
+    CfCertResult append_trx(const wsrep_uuid_t& node, wsrep_conn_id_t conn,
+                            wsrep_seqno_t last_seen,
+                            const std::vector<const char*>& key,
+                            wsrep_key_type_t type)
+    {
+        return append(node, conn, last_seen, key, type,
+                      galera::TrxHandle::F_BEGIN | galera::TrxHandle::F_COMMIT,
+                      nullptr, 0);
+    }
+
+    CfCertResult append_toi(const wsrep_uuid_t& node, wsrep_conn_id_t conn,
+                            wsrep_seqno_t last_seen,
+                            const std::vector<const char*>& key,
+                            wsrep_key_type_t type)
+    {
+        return append(node, conn, last_seen, key, type,
+                      galera::TrxHandle::F_BEGIN | galera::TrxHandle::F_COMMIT
+                          | galera::TrxHandle::F_ISOLATION,
+                      nullptr, 0);
+    }
+
+    CfCertResult append_nbo_begin(const wsrep_uuid_t& node,
+                                  wsrep_conn_id_t conn, wsrep_seqno_t last_seen,
+                                  const std::vector<const char*>& key,
+                                  wsrep_key_type_t type)
+    {
+        return append(node, conn, last_seen, key, type,
+                      galera::TrxHandle::F_BEGIN
+                          | galera::TrxHandle::F_ISOLATION,
+                      nullptr, 0);
+    }
+
+    CfCertResult append_nbo_end(const wsrep_uuid_t& node, wsrep_conn_id_t conn,
+                                wsrep_seqno_t last_seen,
+                                const std::vector<const char*>& key,
+                                wsrep_key_type_t type,
+                                wsrep_seqno_t begin_seqno)
+    {
+        gu::byte_t buf[24];
+        galera::NBOKey nbo_key(begin_seqno);
+        size_t nbo_key_len = nbo_key.serialize(buf, sizeof(buf), 0);
+        return append(node, conn, last_seen, key, type,
+                      galera::TrxHandle::F_COMMIT
+                          | galera::TrxHandle::F_ISOLATION,
+                      buf, nbo_key_len);
+    }
+};
+
+/* This testcase is mainly for checking that the CertFixture works correctly. */
+START_TEST(cert_append_trx)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn2, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert(res.ts->certified());
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+    ck_assert_int_eq(res.ts->global_seqno(), 1);
+}
+END_TEST
+
+/*
+ * Cert against shared
+ */
+
+START_TEST(cert_certify_shared_shared)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_shared_reference)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_shared_update)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_shared_exclusive)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/*
+ * Cert against reference
+ */
+
+START_TEST(cert_certify_reference_shared)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_reference_reference)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_reference_update)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_reference_exclusive)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/*
+ * Cert against update
+ */
+
+START_TEST(cert_certify_update_shared)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_update_reference)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_update_update)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_update_exclusive)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/*
+ * Cert against exclusive
+ */
+
+START_TEST(cert_certify_exclusive_shared)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_exclusive_reference)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_exclusive_update)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_exclusive_exclusive)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/*
+ * Certify branch against leaf. In these cases the first write set has 2 key
+ * parts, the second 3 so that the second write set branch key certifies against
+ * first write set leaf. These are not actually tests for certification,
+ * but rather for key appending producing proper branch keys.
+ * Also, in these tests the leaf key for the second transaction does not matter.
+ */
+
+START_TEST(cert_certify_shared_branch)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn1, 0, { "b", "b" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "b", "l" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_reference_branch)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn1, 0, { "b", "b" }, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "b", "l" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_update_branch)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn1, 0, { "b", "b" }, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "b", "l" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_exclusive_branch)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn1, 0, { "b", "b" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "b", "l" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/* Test certification for branch against other key types. */
+
+START_TEST(cert_certify_branch_shared)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn1, 0, { "b", "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "b" },
+                       WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_branch_reference)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn1, 0, { "b", "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "b" },
+                       WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_branch_update)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn1, 0, { "b", "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "b" },
+                       WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_branch_exclusive)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn1, 0, { "b", "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "b" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/*
+ * TOI shared
+ */
+
+START_TEST(cert_certify_toi_shared_shared)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_shared_reference)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_shared_update)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_shared_exclusive)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/*
+ * TOI reference
+ */
+
+START_TEST(cert_certify_toi_reference_shared)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_reference_reference)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_reference_update)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_reference_exclusive)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/*
+ * TOI update
+ */
+
+START_TEST(cert_certify_toi_update_shared)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_update_reference)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_update_update)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_update_exclusive)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/*
+ * TOI exclusive
+ */
+
+START_TEST(cert_certify_toi_exclusive_shared)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_exclusive_reference)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_exclusive_update)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_UPDATE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_toi_exclusive_exclusive)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+
+/* Exclusive - exclusive TOI to demonstrate that TOI never fails
+ * in certification. */
+START_TEST(cert_certify_exclusive_toi_exclusive)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_toi(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/* Exclusive TOI - Exclusive TOI */
+START_TEST(cert_certify_exclusive_toi_exclusive_toi)
+{
+    CertFixture f;
+    auto res
+        = f.append_toi(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_toi(f.node2, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/* NBO begin - TOI */
+START_TEST(cert_certify_exclusive_nbo_exclusive_toi)
+{
+    CertFixture f;
+    auto res = f.append_nbo_begin(f.node1, f.conn1, 0, { "b", "l" },
+                                  WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->global_seqno(), 1);
+    res = f.append_toi(f.node2, f.conn2, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+    res = f.append_nbo_end(f.node1, f.conn1, 0, { "b", "l" },
+                           WSREP_KEY_EXCLUSIVE, 1);
+    res = f.append_toi(f.node2, f.conn2, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 3);
+}
+END_TEST
+
+/* TOI - NBO begin */
+START_TEST(cert_certify_exclusive_toi_exclusive_nbo)
+{
+    CertFixture f;
+    auto res = f.append_toi(f.node1, f.conn1, 0, { "b", "l" },
+                                  WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_nbo_begin(f.node2, f.conn2, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->global_seqno(), 2);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+    res = f.append_nbo_end(f.node1, f.conn1, 0, { "b", "l" },
+                           WSREP_KEY_EXCLUSIVE, 2);
+    res = f.append_toi(f.node2, f.conn2, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 3);
+}
+END_TEST
+
+/* NBO begin - NBO begin*/
+START_TEST(cert_certify_exclusive_nbo_exclusive_nbo)
+{
+    CertFixture f;
+    auto res = f.append_nbo_begin(f.node1, f.conn1, 0, { "b", "l" },
+                                  WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->global_seqno(), 1);
+    res = f.append_nbo_begin(f.node2, f.conn2, 0, { "b", "l" },
+                             WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+    res = f.append_nbo_end(f.node1, f.conn1, 0, { "b", "l" },
+                           WSREP_KEY_EXCLUSIVE, 1);
+    res = f.append_nbo_begin(f.node2, f.conn2, 0, { "b", "l" },
+                             WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 3);
+}
+END_TEST
+
+/* Write sets originating from the same node should not conflict even with
+ * exclusive key. */
+START_TEST(cert_certify_same_node)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn1, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node1, f.conn2, 0, { "b", "l" },
+                       WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/* Write set outside certification range must not cause conflict, but dependency.
+ */
+START_TEST(cert_certify_exclusive_exclusive_outside_cert_range)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 1, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+START_TEST(cert_certify_exclusive_exclusive_shadowed_by_shared)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 1, {"b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+
+    res = f.append_trx(f.node2, f.conn2, 0, {"b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_FAILED);
+    /* Note that even though the dependency should be to shared key, the
+     * certification checks first for exclusive key and because of conflict,
+     * the scan stops there and the depends seqno is not updated. This does
+     * not matter however, as the test result is failed. */
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/* Even though shared-shared match does not cause conflict or dependency,
+ * having PA_UNSAFE flag in write set must create the dependency. */
+START_TEST(cert_certify_shared_shared_pa_unsafe)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+
+    res = f.append(f.node2, f.conn2, 0, { "b", "l" }, WSREP_KEY_SHARED,
+                   galera::TrxHandle::F_BEGIN | galera::TrxHandle::F_COMMIT
+                       | galera::TrxHandle::F_PA_UNSAFE,
+                   nullptr, 0);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+}
+END_TEST
+
+/* PA unsafe must create dependency even if there is no match. */
+START_TEST(cert_certify_no_match_pa_unsafe)
+{
+    CertFixture f;
+    auto res = f.append_trx(f.node1, f.conn1, 0, {"b", "m"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+
+    res = f.append(f.node2, f.conn2, 0, { "b", "l" }, WSREP_KEY_SHARED,
+                   galera::TrxHandle::F_BEGIN | galera::TrxHandle::F_COMMIT
+                       | galera::TrxHandle::F_PA_UNSAFE,
+                   nullptr, 0);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 1);
+
+}
+END_TEST
+
+START_TEST(cert_certify_no_match)
+{
+    CertFixture f;
+    auto res
+        = f.append_trx(f.node1, f.conn1, 0, { "b", "m" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    res = f.append_trx(f.node2, f.conn2, 0, { "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(res.result, CertResult::TEST_OK);
+    ck_assert_int_eq(res.ts->depends_seqno(), 0);
+}
+END_TEST
+
+
 Suite* certification_suite()
 {
     Suite* s(suite_create("certification"));
@@ -653,6 +1510,62 @@ Suite* certification_suite()
 
     t = tcase_create("certification_zero_level");
     tcase_add_test(t, test_certification_zero_level);
+    suite_add_tcase(s, t);
+
+    t = tcase_create("certification_rules");
+    tcase_add_test(t, cert_append_trx);
+    tcase_add_test(t, cert_certify_shared_shared);
+    tcase_add_test(t, cert_certify_shared_reference);
+    tcase_add_test(t, cert_certify_shared_update);
+    tcase_add_test(t, cert_certify_shared_exclusive);
+    tcase_add_test(t, cert_certify_reference_shared);
+    tcase_add_test(t, cert_certify_reference_reference);
+    tcase_add_test(t, cert_certify_reference_update);
+    tcase_add_test(t, cert_certify_reference_exclusive);
+    tcase_add_test(t, cert_certify_update_shared);
+    tcase_add_test(t, cert_certify_update_reference);
+    tcase_add_test(t, cert_certify_update_update);
+    tcase_add_test(t, cert_certify_update_exclusive);
+    tcase_add_test(t, cert_certify_exclusive_shared);
+    tcase_add_test(t, cert_certify_exclusive_reference);
+    tcase_add_test(t, cert_certify_exclusive_update);
+    tcase_add_test(t, cert_certify_exclusive_exclusive);
+    tcase_add_test(t, cert_certify_shared_branch);
+    tcase_add_test(t, cert_certify_reference_branch);
+    tcase_add_test(t, cert_certify_update_branch);
+    tcase_add_test(t, cert_certify_exclusive_branch);
+    tcase_add_test(t, cert_certify_branch_shared);
+    tcase_add_test(t, cert_certify_branch_reference);
+    tcase_add_test(t, cert_certify_branch_update);
+    tcase_add_test(t, cert_certify_branch_exclusive);
+    tcase_add_test(t, cert_certify_toi_shared_shared);
+    tcase_add_test(t, cert_certify_toi_shared_reference);
+    tcase_add_test(t, cert_certify_toi_shared_update);
+    tcase_add_test(t, cert_certify_toi_shared_exclusive);
+    tcase_add_test(t, cert_certify_toi_reference_shared);
+    tcase_add_test(t, cert_certify_toi_reference_reference);
+    tcase_add_test(t, cert_certify_toi_reference_update);
+    tcase_add_test(t, cert_certify_toi_reference_exclusive);
+    tcase_add_test(t, cert_certify_toi_update_shared);
+    tcase_add_test(t, cert_certify_toi_update_reference);
+    tcase_add_test(t, cert_certify_toi_update_update);
+    tcase_add_test(t, cert_certify_toi_update_exclusive);
+    tcase_add_test(t, cert_certify_toi_exclusive_shared);
+    tcase_add_test(t, cert_certify_toi_exclusive_reference);
+    tcase_add_test(t, cert_certify_toi_exclusive_update);
+    tcase_add_test(t, cert_certify_toi_exclusive_exclusive);
+    tcase_add_test(t, cert_certify_exclusive_toi_exclusive);
+    tcase_add_test(t, cert_certify_exclusive_toi_exclusive_toi);
+    tcase_add_test(t, cert_certify_exclusive_nbo_exclusive_toi);
+    tcase_add_test(t, cert_certify_exclusive_toi_exclusive_nbo);
+    tcase_add_test(t, cert_certify_exclusive_nbo_exclusive_nbo);
+    tcase_add_test(t, cert_certify_same_node);
+    tcase_add_test(t, cert_certify_exclusive_exclusive_outside_cert_range);
+    tcase_add_test(t, cert_certify_exclusive_exclusive_shadowed_by_shared);
+    tcase_add_test(t, cert_certify_shared_shared_pa_unsafe);
+    tcase_add_test(t, cert_certify_no_match_pa_unsafe);
+    tcase_add_test(t, cert_certify_no_match);
+
     suite_add_tcase(s, t);
 
     return s;

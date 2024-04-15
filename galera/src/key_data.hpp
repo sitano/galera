@@ -50,8 +50,8 @@ struct KeyData
       copy     (kd.copy)
     {}
 
+    bool shared() const { return (type == WSREP_KEY_SHARED); }
     bool shared_or_ref() const { return (type <= WSREP_KEY_REFERENCE); }
-    bool deprecated() const { return (type == WSREP_KEY_SHARED); }
 
     void print(std::ostream& os) const;
 

@@ -19,7 +19,7 @@ class TestKey
 {
 public:
 
-    TestKey (int a, int  const ver,
+    TestKey (int  const ver,
              wsrep_key_type_t const type,
              std::vector<const char*> const parts,
              bool        const copy = true)

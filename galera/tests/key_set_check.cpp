@@ -7,6 +7,7 @@
 
 #include "test_key.hpp"
 #include "../src/key_set.hpp"
+#include "../src/write_set_ng.hpp"
 
 #include "gu_logger.hpp"
 #include "gu_hexdump.hpp"
@@ -419,6 +420,402 @@ START_TEST (ver2_5)
 }
 END_TEST
 
+struct KsoFixture
+{
+    union Res
+    {
+        gu::byte_t buf[1024];
+        gu_word_t align;
+    };
+    Res res{};
+    TestBaseName basename{ "ksof" };
+    galera::KeySetOut kso{ res.buf,
+                           sizeof(res.buf),
+                           basename,
+                           galera::KeySet::FLAT8A,
+                           gu::RecordSet::VER2,
+                           galera::WriteSetNG::MAX_VERSION };
+    void append(const std::vector<const char*> key, wsrep_key_type_t type)
+    {
+
+        TestKey k{ galera::KeySet::FLAT8A, type, key };
+        kso.append(k());
+    }
+};
+
+/*
+ * Shared leaf
+ */
+
+START_TEST(kso_append_shared_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_shared_over_shared_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_SHARED);
+    f.append({ "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_reference_over_shared_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_SHARED);
+    f.append({ "b", "l" }, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_update_over_shared_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_SHARED);
+    f.append({ "b", "l" }, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_exclusive_over_shared_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_SHARED);
+    f.append({ "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_shared_branch_over_shared_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_SHARED);
+    f.append({"b", "b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_reference_branch_over_shared_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_SHARED);
+    f.append({"b", "b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_update_branch_over_shared_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_SHARED);
+    f.append({"b", "b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_exclusive_branch_over_shared_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_SHARED);
+    f.append({"b", "b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_shared_leaf_over_branch)
+{
+    KsoFixture f;
+    f.append({"b", "l"}, WSREP_KEY_SHARED);
+    f.append({"b"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+/*
+ * Reference leaf
+ */
+
+START_TEST(kso_append_reference_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_shared_over_reference_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_REFERENCE);
+    f.append({ "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_reference_over_reference_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_REFERENCE);
+    f.append({ "b", "l" }, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_update_over_reference_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_REFERENCE);
+    f.append({ "b", "l" }, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_exclusive_over_reference_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_REFERENCE);
+    f.append({ "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_shared_branch_over_reference_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_REFERENCE);
+    f.append({"b", "b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_reference_branch_over_reference_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_REFERENCE);
+    f.append({"b", "b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_update_branch_over_reference_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_REFERENCE);
+    f.append({"b", "b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_exclusive_branch_over_reference_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_REFERENCE);
+    f.append({"b", "b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_reference_leaf_over_branch)
+{
+    KsoFixture f;
+    f.append({"b", "l"}, WSREP_KEY_SHARED);
+    f.append({"b"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+/*
+ * Update leaf
+ */
+
+START_TEST(kso_append_update_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_shared_over_update_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_UPDATE);
+    f.append({ "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_reference_over_update_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_UPDATE);
+    f.append({ "b", "l" }, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_update_over_update_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_UPDATE);
+    f.append({ "b", "l" }, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_exclusive_over_update_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_UPDATE);
+    f.append({ "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_shared_branch_over_update_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_UPDATE);
+    f.append({"b", "b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_reference_branch_over_update_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_UPDATE);
+    f.append({"b", "b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_update_branch_over_update_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_UPDATE);
+    f.append({"b", "b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_exclusive_branch_over_update_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_UPDATE);
+    f.append({"b", "b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+START_TEST(kso_append_update_leaf_over_branch)
+{
+    KsoFixture f;
+    f.append({"b", "l"}, WSREP_KEY_SHARED);
+    f.append({"b"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
+
+/*
+ * Exclusive leaf
+ */
+
+START_TEST(kso_append_exclusive_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_shared_over_exclusive_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    f.append({ "b", "l" }, WSREP_KEY_SHARED);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_reference_over_exclusive_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    f.append({ "b", "l" }, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_update_over_exclusive_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    f.append({ "b", "l" }, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_exclusive_over_exclusive_leaf)
+{
+    KsoFixture f;
+    f.append({ "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    f.append({ "b", "l" }, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_shared_branch_over_exclusive_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_EXCLUSIVE);
+    f.append({"b", "b", "l"}, WSREP_KEY_SHARED);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_reference_branch_over_exclusive_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_EXCLUSIVE);
+    f.append({"b", "b", "l"}, WSREP_KEY_REFERENCE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_update_branch_over_exclusive_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_EXCLUSIVE);
+    f.append({"b", "b", "l"}, WSREP_KEY_UPDATE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_exclusive_branch_over_exclusive_leaf)
+{
+    KsoFixture f;
+    f.append({"b", "b"}, WSREP_KEY_EXCLUSIVE);
+    f.append({"b", "b", "l"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(f.kso.count(), 2);
+}
+END_TEST
+
+START_TEST(kso_append_exclusive_leaf_over_branch)
+{
+    KsoFixture f;
+    f.append({"b", "l"}, WSREP_KEY_SHARED);
+    f.append({"b"}, WSREP_KEY_EXCLUSIVE);
+    ck_assert_int_eq(f.kso.count(), 3);
+}
+END_TEST
+
 Suite* key_set_suite ()
 {
     TCase* t = tcase_create ("KeySet");
@@ -429,6 +826,51 @@ Suite* key_set_suite ()
     tcase_add_test (t, ver2_4);
     tcase_add_test (t, ver2_5);
     tcase_set_timeout(t, 60);
+
+
+    tcase_add_test(t, kso_append_shared_leaf);
+    tcase_add_test(t, kso_append_shared_over_shared_leaf);
+    tcase_add_test(t, kso_append_reference_over_shared_leaf);
+    tcase_add_test(t, kso_append_update_over_shared_leaf);
+    tcase_add_test(t, kso_append_exclusive_over_shared_leaf);
+    tcase_add_test(t, kso_append_shared_branch_over_shared_leaf);
+    tcase_add_test(t, kso_append_reference_branch_over_shared_leaf);
+    tcase_add_test(t, kso_append_update_branch_over_shared_leaf);
+    tcase_add_test(t, kso_append_exclusive_branch_over_shared_leaf);
+    tcase_add_test(t, kso_append_shared_leaf_over_branch);
+
+    tcase_add_test(t, kso_append_reference_leaf);
+    tcase_add_test(t, kso_append_shared_over_reference_leaf);
+    tcase_add_test(t, kso_append_reference_over_reference_leaf);
+    tcase_add_test(t, kso_append_update_over_reference_leaf);
+    tcase_add_test(t, kso_append_exclusive_over_reference_leaf);
+    tcase_add_test(t, kso_append_shared_branch_over_reference_leaf);
+    tcase_add_test(t, kso_append_reference_branch_over_reference_leaf);
+    tcase_add_test(t, kso_append_update_branch_over_reference_leaf);
+    tcase_add_test(t, kso_append_exclusive_branch_over_reference_leaf);
+    tcase_add_test(t, kso_append_reference_leaf_over_branch);
+
+    tcase_add_test(t, kso_append_update_leaf);
+    tcase_add_test(t, kso_append_shared_over_update_leaf);
+    tcase_add_test(t, kso_append_reference_over_update_leaf);
+    tcase_add_test(t, kso_append_update_over_update_leaf);
+    tcase_add_test(t, kso_append_exclusive_over_update_leaf);
+    tcase_add_test(t, kso_append_shared_branch_over_update_leaf);
+    tcase_add_test(t, kso_append_reference_branch_over_update_leaf);
+    tcase_add_test(t, kso_append_update_branch_over_update_leaf);
+    tcase_add_test(t, kso_append_exclusive_branch_over_update_leaf);
+    tcase_add_test(t, kso_append_update_leaf_over_branch);
+
+    tcase_add_test(t, kso_append_exclusive_leaf);
+    tcase_add_test(t, kso_append_shared_over_exclusive_leaf);
+    tcase_add_test(t, kso_append_reference_over_exclusive_leaf);
+    tcase_add_test(t, kso_append_update_over_exclusive_leaf);
+    tcase_add_test(t, kso_append_exclusive_over_exclusive_leaf);
+    tcase_add_test(t, kso_append_shared_branch_over_exclusive_leaf);
+    tcase_add_test(t, kso_append_reference_branch_over_exclusive_leaf);
+    tcase_add_test(t, kso_append_update_branch_over_exclusive_leaf);
+    tcase_add_test(t, kso_append_exclusive_branch_over_exclusive_leaf);
+    tcase_add_test(t, kso_append_exclusive_leaf_over_branch);
 
     Suite* s = suite_create ("KeySet");
     suite_add_tcase (s, t);
