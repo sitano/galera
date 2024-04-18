@@ -21,6 +21,20 @@
 
 #include <boost/bind.hpp>
 
+static bool is_isolated()
+{
+    const auto mode
+        = gu::gu_asio_node_isolation_mode.load(std::memory_order_relaxed);
+    switch (mode)
+    {
+    case WSREP_NODE_ISOLATION_OFF: return false;
+    case WSREP_NODE_ISOLATION_ON: return true;
+    case WSREP_NODE_ISOLATION_FORCE_DISCONNECT:
+        gu_throw_fatal << "Network reactor termination was requested by "
+                          "WSREP_NODE_ISOLATION_FORCE_DISCONNECT";
+    }
+    return true; /* to keep compiler happy */
+}
 
 gu::AsioStreamReact::AsioStreamReact(
     AsioIoService& io_service,
@@ -412,6 +426,13 @@ void gu::AsioStreamReact::client_handshake_handler(
         close();
         return;
     }
+
+    if (is_isolated())
+    {
+        handle_isolation_error(handler);
+        return;
+    }
+
     auto result(engine_->client_handshake());
     GU_ASIO_DEBUG(debug_print()
                   << "AsioStreamReact::client_handshake_handler: result from engine: "
@@ -495,6 +516,11 @@ void gu::AsioStreamReact::server_handshake_handler(
         return;
     }
 
+    if (is_isolated())
+    {
+        throw asio::system_error(asio::error::basic_errors::operation_aborted);
+    }
+
     auto result = engine_->server_handshake();
     auto self = shared_from_this();
     // Clear possible write IO
@@ -522,6 +548,12 @@ void gu::AsioStreamReact::read_handler(
     {
         handle_read_handler_error(handler,
                                   AsioErrorCode(ec.value(), ec.category()));
+        return;
+    }
+
+    if (is_isolated())
+    {
+        handle_isolation_error(handler);
         return;
     }
 
@@ -587,6 +619,12 @@ void gu::AsioStreamReact::write_handler(
     {
         handle_write_handler_error(handler,
                                    AsioErrorCode(ec.value(), ec.category()));
+        return;
+    }
+
+    if (is_isolated())
+    {
+        handle_isolation_error(handler);
         return;
     }
 
@@ -765,6 +803,18 @@ void gu::AsioStreamReact::handle_write_handler_error(
         *this,
         ec,
         write_context_.bytes_transferred());
+    close();
+}
+
+void gu::AsioStreamReact::handle_isolation_error(
+    const std::shared_ptr<AsioSocketHandler>& handler)
+{
+    shutdown();
+    handler->write_handler(
+        *this,
+        AsioErrorCode(asio::error::basic_errors::operation_aborted,
+                      asio::error::get_system_category()),
+        0);
     close();
 }
 
