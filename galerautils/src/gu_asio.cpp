@@ -245,6 +245,11 @@ std::ostream& gu::operator<<(std::ostream& os, const gu::AsioErrorCode& ec)
     return (os << ec.message());
 }
 
+gu::AsioErrorCode gu::AsioErrorCode::make_eof()
+{
+  return {asio::error::misc_errors::eof, gu_asio_misc_category};
+}
+
 bool gu::AsioErrorCode::is_eof() const
 {
     return (category_ &&
