@@ -1054,7 +1054,9 @@ static void set_x509v3_extensions(X509* x509, X509* issuer, bool const is_ca)
     X509V3_CTX ctx;
     X509V3_set_ctx(&ctx, issuer ? issuer : x509, x509, nullptr, nullptr, 0);
     X509V3_set_nconf(&ctx, conf);
-    if (!X509V3_EXT_add_nconf(conf, &ctx, (char *)"extensions", x509))
+    char extensions[16];
+    ::strncpy(extensions, "extensions", sizeof(extensions));
+    if (!X509V3_EXT_add_nconf(conf, &ctx, extensions, x509))
     {
         throw_error("Could not add extension");
     }
