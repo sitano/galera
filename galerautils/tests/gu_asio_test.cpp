@@ -1023,13 +1023,13 @@ static void write_key(EVP_PKEY* pkey, const std::string& filename)
     fclose(key_file);
 }
 
-static void set_x509v3_extensions(X509* x509, X509* issuer)
+static void set_x509v3_extensions(X509* x509, X509* issuer, bool const is_ca)
 {
     auto* conf_bio = BIO_new(BIO_s_mem());
     std::string ext{ "[extensions]\n"
                      "authorityKeyIdentifier=keyid,issuer\n"
                      "subjectKeyIdentifier=hash\n" };
-    if (!issuer)
+    if (is_ca)
     {
         ext += "basicConstraints=critical,CA:TRUE\n";
     }
@@ -1062,7 +1062,8 @@ static void set_x509v3_extensions(X509* x509, X509* issuer)
     BIO_free(conf_bio);
 }
 
-static X509* create_x509(EVP_PKEY* pkey, X509* issuer, const char* cn)
+static X509* create_x509(EVP_PKEY* pkey, X509* issuer, const char* cn,
+                         bool const is_ca)
 {
     auto* x509 = X509_new();
     /* According to standard, value 2 means version 3. */
@@ -1096,7 +1097,7 @@ static X509* create_x509(EVP_PKEY* pkey, X509* issuer, const char* cn)
         X509_set_issuer_name(x509, X509_get_subject_name(issuer));
     }
 
-    set_x509v3_extensions(x509, issuer);
+    set_x509v3_extensions(x509, issuer, is_ca);
 
     X509_sign(x509, pkey, EVP_sha256());
 
@@ -1136,10 +1137,10 @@ static void generate_self_signed()
 {
     auto* pkey = create_key();
     write_key(pkey, "galera_key.pem");
-    auto* ca = create_x509(pkey, nullptr, "Galera Root");
+    auto* ca = create_x509(pkey, nullptr, "Galera Root", true);
     write_x509(ca, "galera_ca.pem");
 
-    auto* cert = create_x509(pkey, ca, "Galera Cert");
+    auto* cert = create_x509(pkey, ca, "Galera Cert", false);
     write_x509(cert, "galera_cert.pem");
     X509_free(cert);
     X509_free(ca);
@@ -1155,32 +1156,28 @@ static void generate_self_signed()
   Two bundles consisting of intermediate CA and server certificate
   are created for servers 1 and 2.
  */
-static void generate_chains()
+static void generate_self_signed_chains()
 {
-    auto* root_ca_key = create_key();
-    auto* root_ca = create_x509(root_ca_key, nullptr, "Galera Root CA");
-    auto* int_ca_key = create_key();
-    auto* int_ca = create_x509(int_ca_key, root_ca, "Galera Intermediate CA");
-
-    auto* server_1_key = create_key();
-    auto* server_1_cert = create_x509(server_1_key, int_ca, "Galera Server 1");
-    auto* server_2_key = create_key();
-    auto* server_2_cert = create_x509(server_2_key, int_ca, "Galera Server 2");
+    auto* sign_key = create_key();
+    auto* root_ca = create_x509(sign_key, nullptr, "Galera Root CA", true);
+    auto* int_ca
+        = create_x509(sign_key, root_ca, "Galera Intermediate CA", true);
+    auto* server_1_cert
+        = create_x509(sign_key, int_ca, "Galera Server 1", false);
+    auto* server_2_cert
+        = create_x509(sign_key, int_ca, "Galera Server 2", false);
 
     write_x509(root_ca, "galera-ca.pem");
-    write_key(server_1_key, "galera-server-1.key");
+    write_key(sign_key, "galera-server-1.key");
     write_x509_list({ server_1_cert, int_ca }, "bundle-galera-server-1.pem");
-    write_key(server_2_key, "galera-server-2.key");
+    write_key(sign_key, "galera-server-2.key");
     write_x509_list({ server_2_cert, int_ca }, "bundle-galera-server-2.pem");
 
     X509_free(server_2_cert);
-    EVP_PKEY_free(server_2_key);
     X509_free(server_1_cert);
-    EVP_PKEY_free(server_1_key);
     X509_free(int_ca);
-    EVP_PKEY_free(int_ca_key);
     X509_free(root_ca);
-    EVP_PKEY_free(root_ca_key);
+    EVP_PKEY_free(sign_key);
 }
 
 static void generate_certificates()
@@ -1192,7 +1189,7 @@ static void generate_certificates()
 #endif
 
   generate_self_signed();
-  generate_chains();
+  generate_self_signed_chains();
 }
 
 //
@@ -1465,12 +1462,13 @@ START_TEST(test_ssl_certificate_chain)
     server_io_service.run_one(); // Accept
     client_io_service.run_one(); // Client hello
     client_io_service.run_one(); // Client hello IO completion
-    // server_io_service.run_one(); // Server handles
+
     while (acceptor_handler->accepted_socket() != 0)
     {
         client_io_service.poll_one();
         server_io_service.poll_one();
     }
+    ck_assert(!handler->last_error_code());
 }
 END_TEST
 
