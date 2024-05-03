@@ -256,6 +256,8 @@ namespace gu
 
         bool operator!() const { return value_ == 0; }
 
+
+        static AsioErrorCode make_eof();
         /**
          * Return true if the error is end of file.
          */
@@ -311,7 +313,7 @@ namespace gu
         /**
          * This will be called after asynchronous connection to the
          * remote endpoint after call to AsioSocket::async_connect()
-         * completes.
+         * completes, or after accepted socket becomes ready.
          *
          * All internal protocol handshakes (e.g. SSL) will be completed
          * before this handler is called.
@@ -617,6 +619,7 @@ namespace gu
         virtual void listen(const gu::URI& uri) = 0;
         virtual void close() = 0;
         virtual void async_accept(const std::shared_ptr<AsioAcceptorHandler>&,
+                                  const std::shared_ptr<AsioSocketHandler>&,
                                   const std::shared_ptr<AsioStreamEngine>& engine = nullptr) = 0;
         virtual std::shared_ptr<AsioSocket> accept() = 0;
         virtual std::string listen_addr() const = 0;
