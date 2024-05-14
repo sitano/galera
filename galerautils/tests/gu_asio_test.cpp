@@ -1917,7 +1917,7 @@ START_TEST(test_server_handshake_eof2)
     // The EOF will now handled in server handshake handler.
     f.acceptor_handler->next_stream_engine->next_result = gu::AsioStreamEngine::want_write;
     f.complete_server_handshake();
-    ck_assert(f.acceptor_handler->cur_stream_engine);
+    ck_assert(f.acceptor_handler->cur_stream_engine != nullptr);
     f.acceptor_handler->cur_stream_engine->next_result = gu::AsioStreamEngine::eof;
     f.server_io_service.run_one();
     ck_assert_int_eq(
@@ -1946,7 +1946,7 @@ START_TEST(test_server_handshake_error2)
     // The error will now handled in server handshake handler.
     f.acceptor_handler->next_stream_engine->next_result = gu::AsioStreamEngine::want_write;
     f.complete_server_handshake();
-    ck_assert(f.acceptor_handler->cur_stream_engine);
+    ck_assert(f.acceptor_handler->cur_stream_engine != nullptr);
     f.acceptor_handler->cur_stream_engine->next_result = gu::AsioStreamEngine::error;
     f.acceptor_handler->cur_stream_engine->next_error = EPIPE;
     f.server_io_service.run_one();
@@ -1961,7 +1961,7 @@ START_TEST(test_accept_after_server_handshake_error)
         = gu::AsioStreamEngine::error;
     f.acceptor_handler->next_stream_engine->next_error = EPIPE;
     f.complete_server_handshake();
-    ck_assert(f.acceptor_handler->cur_stream_engine);
+    ck_assert(f.acceptor_handler->cur_stream_engine != nullptr);
     ck_assert_int_eq(
         f.acceptor_handler->cur_stream_engine->count_server_handshake_called,
         1);
@@ -1969,7 +1969,7 @@ START_TEST(test_accept_after_server_handshake_error)
     f.acceptor_handler->cur_stream_engine->next_error = 0;
     f.run_async_connect();
     f.complete_server_handshake();
-    ck_assert(f.acceptor_handler->accepted_socket());
+    ck_assert(f.acceptor_handler->accepted_socket() != nullptr);
     ck_assert_int_eq(
         f.acceptor_handler->cur_stream_engine->count_server_handshake_called,
         1);
