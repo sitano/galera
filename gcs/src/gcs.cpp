@@ -1494,7 +1494,14 @@ static void *gcs_recv_thread (void *arg)
         {
             ret = gcs_handle_actions (conn, rcvd);
 
-            if (gu_unlikely(ret < 0)) {         // error
+            if (gu_unlikely(ret <= 0 && GCS_ACT_COMMIT_CUT == rcvd.act.type))
+            {
+                /* Commit cut will be discarded, the buffer needs to be
+                 * freed */
+                ::free(const_cast<void*>(rcvd.act.buf));
+            }
+            if (gu_unlikely(ret < 0))
+            { // error
                 gu_debug ("gcs_handle_actions returned %d: %s",
                           ret, strerror(-ret));
                 break;
