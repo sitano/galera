@@ -111,6 +111,8 @@ namespace gu
         void handle_write_handler_error(
             const std::shared_ptr<AsioSocketHandler>&,
             const AsioErrorCode&);
+        void handle_isolation_error(
+            const std::shared_ptr<AsioSocketHandler>&);
 
         void set_non_blocking(bool);
 
@@ -265,7 +267,7 @@ namespace gu
         bool listening_;
         std::shared_ptr<AsioStreamEngine> engine_;
     };
-}
+} // namespace gu
 
 #include "gu_enable_non_virtual_dtor.hpp"
 

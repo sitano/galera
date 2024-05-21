@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2014-2020 Codership Oy <info@codership.com>
+// Copyright (C) 2014-2024 Codership Oy <info@codership.com>
 //
 
 
@@ -16,10 +16,12 @@
 
 #include "wsrep_tls_service.h"
 #include "wsrep_allowlist_service.h"
+#include "wsrep_node_isolation.h"
 
 #include <netinet/tcp.h> // tcp_info
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -802,6 +804,10 @@ namespace gu
     /* Init/deinit global allowlist service hooks. */
     int init_allowlist_service_v1(wsrep_allowlist_service_v1_t*);
     void deinit_allowlist_service_v1();
+    /* Global isolation mode. */
+    extern std::atomic<enum wsrep_node_isolation_mode>
+        gu_asio_node_isolation_mode;
+
 }
 
 #endif // GU_ASIO_HPP
