@@ -131,18 +131,25 @@ gcs_node_record_state (gcs_node_t* node, gcs_state_msg_t* state_msg)
 void
 gcs_node_set_vote (gcs_node_t* const node,
                    gcs_seqno_t const seqno,
-                   int64_t     const vote)
+                   int64_t     const vote,
+                   int         const gcs_proto)
 {
     assert(0 == vote || seqno >= node->last_applied);
     assert(seqno > node->vote_seqno);
 
-    gcs_seqno_t const min_seqno(std::max(node->last_applied, node->vote_seqno));
+    gcs_seqno_t const min_seqno =
+        gcs_proto >= 4
+        ? node->vote_seqno
+        : std::max(node->last_applied, node->vote_seqno);
 
     if (gu_unlikely(seqno <= min_seqno)) {
         gu_warn ("Received bogus VOTE message: %lld.%0llx, from node %s, "
                  "expected > %lld. Ignoring.",
                  (long long)seqno, (long long)vote, node->id,
                  (long long)min_seqno);
+        /* we should not be here: gcs_group_handle_vote_msg() should have
+         * taken care of it. */
+        assert(0);
     }
     else {
         node->vote_seqno = seqno;
