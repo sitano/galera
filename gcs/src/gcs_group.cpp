@@ -1032,8 +1032,15 @@ gcs_group_handle_vote_msg (gcs_group_t* group, const gcs_recv_msg_t* msg)
         return ret;
     }
 
-    if (gtid.uuid() == group->group_uuid &&
-        gtid.seqno() > group->vote_result.seqno)
+    /* If either group-wide vote seqno or last applied are greater than the
+       request seqno, the vote has either happened already or there was no
+       need (i.e. all other members had a success). */
+    gcs_seqno_t const min_seqno =
+        group->quorum.gcs_proto_ver >= 4
+        ? std::max(group->last_applied, group->vote_result.seqno)
+        : group->vote_result.seqno;
+
+    if (gtid.uuid() == group->group_uuid && gtid.seqno() > min_seqno)
     {
         const char* const data
             (gcs::core::CodeMsg::serial_size() < msg->size ?
@@ -1049,7 +1056,8 @@ gcs_group_handle_vote_msg (gcs_group_t* group, const gcs_recv_msg_t* msg)
         {
             gu::Lock lock(group->memb_mtx_);
             group->memb_epoch_ = group->act_id_;
-            gcs_node_set_vote (&sender, gtid.seqno(), code);
+            gcs_node_set_vote (&sender, gtid.seqno(), code,
+                               group->quorum.gcs_proto_ver);
         }
 
         if (group_recount_votes(*group))
