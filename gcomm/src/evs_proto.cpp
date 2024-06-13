@@ -2302,7 +2302,7 @@ void gcomm::evs::Proto::handle_foreign(const Message& msg)
     // a join message from joining node. This is to reduce the probability
     // of install timeouts because of already ongoing cluster configuration
     // changes.
-    const auto is_join_message_with_self
+    const bool is_join_message_with_self
         = msg.type() == Message::EVS_T_JOIN
           && msg.node_list().find(my_uuid_) != msg.node_list().end();
     if (state() == S_JOINING && not is_join_message_with_self)

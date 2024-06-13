@@ -23,7 +23,7 @@ void set_recv_buf_size_helper(const gu::Config& conf, Socket& socket)
         assert(ssize_t(recv_buf_size) >= 0);
 
         socket->set_receive_buffer_size(recv_buf_size);
-        auto cur_value(socket->get_receive_buffer_size());
+        size_t cur_value(socket->get_receive_buffer_size());
         log_debug << "socket recv buf size " << cur_value;
         if (cur_value < recv_buf_size && not asio_recv_buf_warned)
         {
@@ -48,7 +48,7 @@ void set_send_buf_size_helper(const gu::Config& conf, Socket& socket)
         assert(ssize_t(send_buf_size) >= 0);
 
         socket->set_send_buffer_size(send_buf_size);
-        auto cur_value(socket->get_send_buffer_size());
+        size_t cur_value(socket->get_send_buffer_size());
         log_debug << "socket send buf size " << cur_value;
         if (cur_value < send_buf_size && not asio_send_buf_warned)
         {
