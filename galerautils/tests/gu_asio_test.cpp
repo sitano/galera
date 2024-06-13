@@ -403,7 +403,7 @@ template <class Socket>
 void test_socket_receive_buffer_size_common(Socket& socket, const gu::URI& uri)
 {
     socket.open(uri);
-    auto default_size(socket.get_receive_buffer_size());
+    size_t default_size(socket.get_receive_buffer_size());
     socket.set_receive_buffer_size(default_size/2);
     ck_assert(socket.get_receive_buffer_size() == default_size/2);
 
@@ -450,7 +450,7 @@ template <class Socket>
 void test_socket_send_buffer_size_common(Socket& socket, const gu::URI& uri)
 {
     socket.open(uri);
-    auto default_size(socket.get_send_buffer_size());
+    size_t default_size(socket.get_send_buffer_size());
     socket.set_send_buffer_size(default_size/2);
     ck_assert(socket.get_send_buffer_size() == default_size/2);
 }
@@ -570,7 +570,7 @@ START_TEST(test_tcp_acceptor_receive_buffer_size)
     gu::URI uri("tcp://127.0.0.1:0");
     auto acceptor(io_service.make_acceptor(uri));
     acceptor->open(uri);
-    auto default_size(acceptor->get_receive_buffer_size());
+    size_t default_size(acceptor->get_receive_buffer_size());
     acceptor->set_receive_buffer_size(default_size/2);
     ck_assert(acceptor->get_receive_buffer_size() == default_size/2);
 }
@@ -604,7 +604,7 @@ START_TEST(test_tcp_acceptor_send_buffer_size)
     gu::URI uri("tcp://127.0.0.1:0");
     auto acceptor(io_service.make_acceptor(uri));
     acceptor->open(uri);
-    auto default_size(acceptor->get_send_buffer_size());
+    size_t default_size(acceptor->get_send_buffer_size());
     acceptor->set_send_buffer_size(default_size/2);
     ck_assert(acceptor->get_send_buffer_size() == default_size/2);
 }
@@ -2002,7 +2002,7 @@ START_TEST(test_read_want_read)
     f.client_io_service.reset();
     f.client_io_service.run_one();
     f.acceptor_handler->cur_stream_engine->next_result = gu::AsioStreamEngine::success;
-    const auto expect_count_read_called = f.acceptor_handler->cur_stream_engine->count_read_called + 1;
+    const size_t expect_count_read_called = f.acceptor_handler->cur_stream_engine->count_read_called + 1;
     f.run_server_while(
 		       [&f, expect_count_read_called]() { return f.acceptor_handler->cur_stream_engine->count_read_called < expect_count_read_called; });
     ck_assert(f.acceptor_handler->cur_stream_engine->count_read_called == expect_count_read_called);
@@ -2028,7 +2028,7 @@ START_TEST(test_read_want_write)
     f.acceptor_handler->accepted_socket()->async_read(
         gu::AsioMutableBuffer(buf.data(), buf.size()),
         f.acceptor_handler->accepted_handler());
-    const auto expect_count_read_called = f.acceptor_handler->cur_stream_engine->count_read_called + 1;
+    const size_t expect_count_read_called = f.acceptor_handler->cur_stream_engine->count_read_called + 1;
     f.run_server_while(
 		       [&f, expect_count_read_called]() { return f.acceptor_handler->cur_stream_engine->count_read_called < expect_count_read_called; });
 

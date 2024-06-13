@@ -742,7 +742,7 @@ void gu::AsioStreamReact::complete_read_op(
             read_context_.bytes_transferred()));
     if (read_completion == 0)
     {
-        auto total_transferred(read_context_.bytes_transferred());
+        std::size_t total_transferred(read_context_.bytes_transferred());
         read_context_.reset();
         handler->read_handler(*this, AsioErrorCode(), total_transferred);
     }
@@ -767,7 +767,7 @@ void gu::AsioStreamReact::complete_write_op(
     write_context_.inc_bytes_transferred(bytes_transferred);
     if (write_context_.bytes_transferred() == write_context_.buf().size())
     {
-        auto total_transferred(write_context_.bytes_transferred());
+        std::size_t total_transferred(write_context_.bytes_transferred());
         write_context_.reset();
         handler->write_handler(*this, AsioErrorCode(), total_transferred);
     }
@@ -1054,7 +1054,7 @@ void gu::AsioAcceptorReact::accept_handler(
     socket->assign_addresses();
 
     std::string remote_ip = gu::unescape_addr(::escape_addr(socket->socket_.remote_endpoint().address()));
-    auto connection_allowed(gu::allowlist_value_check(WSREP_ALLOWLIST_KEY_IP, remote_ip));
+    bool connection_allowed(gu::allowlist_value_check(WSREP_ALLOWLIST_KEY_IP, remote_ip));
     if (connection_allowed == false)
     {
         log_warn << "Connection not allowed, IP " <<
