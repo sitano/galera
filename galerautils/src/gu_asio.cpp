@@ -913,5 +913,5 @@ void gu::deinit_allowlist_service_v1()
 }
 
 std::atomic<enum wsrep_node_isolation_mode> gu::gu_asio_node_isolation_mode{
-    WSREP_NODE_ISOLATION_OFF
+    WSREP_NODE_ISOLATION_NOT_ISOLATED
 };
