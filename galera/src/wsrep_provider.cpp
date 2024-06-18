@@ -1873,7 +1873,7 @@ void wsrep_deinit_config_service_v1()
 extern "C" enum wsrep_node_isolation_result
 wsrep_node_isolation_mode_set_v1(enum wsrep_node_isolation_mode mode)
 {
-    if (mode < WSREP_NODE_ISOLATION_OFF
+    if (mode < WSREP_NODE_ISOLATION_NOT_ISOLATED
         || mode > WSREP_NODE_ISOLATION_FORCE_DISCONNECT)
     {
         return WSREP_NODE_ISOLATION_INVALID_VALUE;

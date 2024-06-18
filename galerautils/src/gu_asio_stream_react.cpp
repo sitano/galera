@@ -27,8 +27,8 @@ static bool is_isolated()
         = gu::gu_asio_node_isolation_mode.load(std::memory_order_relaxed);
     switch (mode)
     {
-    case WSREP_NODE_ISOLATION_OFF: return false;
-    case WSREP_NODE_ISOLATION_ON: return true;
+    case WSREP_NODE_ISOLATION_NOT_ISOLATED: return false;
+    case WSREP_NODE_ISOLATION_ISOLATED: return true;
     case WSREP_NODE_ISOLATION_FORCE_DISCONNECT:
         gu_throw_fatal << "Network reactor termination was requested by "
                           "WSREP_NODE_ISOLATION_FORCE_DISCONNECT";
