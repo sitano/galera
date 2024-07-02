@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2014-2020 Codership Oy <info@codership.com>
+// Copyright (C) 2014-2024 Codership Oy <info@codership.com>
 //
 
 
@@ -16,10 +16,12 @@
 
 #include "wsrep_tls_service.h"
 #include "wsrep_allowlist_service.h"
+#include "wsrep_node_isolation.h"
 
 #include <netinet/tcp.h> // tcp_info
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -256,6 +258,8 @@ namespace gu
 
         bool operator!() const { return value_ == 0; }
 
+
+        static AsioErrorCode make_eof();
         /**
          * Return true if the error is end of file.
          */
@@ -311,7 +315,7 @@ namespace gu
         /**
          * This will be called after asynchronous connection to the
          * remote endpoint after call to AsioSocket::async_connect()
-         * completes.
+         * completes, or after accepted socket becomes ready.
          *
          * All internal protocol handshakes (e.g. SSL) will be completed
          * before this handler is called.
@@ -617,6 +621,7 @@ namespace gu
         virtual void listen(const gu::URI& uri) = 0;
         virtual void close() = 0;
         virtual void async_accept(const std::shared_ptr<AsioAcceptorHandler>&,
+                                  const std::shared_ptr<AsioSocketHandler>&,
                                   const std::shared_ptr<AsioStreamEngine>& engine = nullptr) = 0;
         virtual std::shared_ptr<AsioSocket> accept() = 0;
         virtual std::string listen_addr() const = 0;
@@ -799,6 +804,10 @@ namespace gu
     /* Init/deinit global allowlist service hooks. */
     int init_allowlist_service_v1(wsrep_allowlist_service_v1_t*);
     void deinit_allowlist_service_v1();
+    /* Global isolation mode. */
+    extern std::atomic<enum wsrep_node_isolation_mode>
+        gu_asio_node_isolation_mode;
+
 }
 
 #endif // GU_ASIO_HPP

@@ -22,6 +22,7 @@
 #include "wsrep_params.hpp"
 #include "gu_event_service.hpp"
 #include "wsrep_config_service.h"
+#include "wsrep_node_isolation.h"
 
 #include <cassert>
 
@@ -1922,3 +1923,22 @@ wsrep_status_t wsrep_init_membership_service_v1(
 extern "C" void wsrep_deinit_membership_service_v1()
 {
 }
+
+/*
+ * This function may be called from signal handler, so make sure that
+ * only 'safe' system calls and library functions are used. See
+ * https://pubs.opengroup.org/onlinepubs/009695399/functions/xsh_chap02_04.html
+ */
+extern "C" enum wsrep_node_isolation_result
+wsrep_node_isolation_mode_set_v1(enum wsrep_node_isolation_mode mode)
+{
+    if (mode < WSREP_NODE_ISOLATION_NOT_ISOLATED
+        || mode > WSREP_NODE_ISOLATION_FORCE_DISCONNECT)
+    {
+        return WSREP_NODE_ISOLATION_INVALID_VALUE;
+    }
+    gu::gu_asio_node_isolation_mode = mode;
+    return WSREP_NODE_ISOLATION_SUCCESS;
+}
+
+

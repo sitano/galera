@@ -1494,7 +1494,14 @@ static void *gcs_recv_thread (void *arg)
         {
             ret = gcs_handle_actions (conn, rcvd);
 
-            if (gu_unlikely(ret < 0)) {         // error
+            if (gu_unlikely(ret <= 0 && GCS_ACT_COMMIT_CUT == rcvd.act.type))
+            {
+                /* Commit cut will be discarded, the buffer needs to be
+                 * freed */
+                ::free(const_cast<void*>(rcvd.act.buf));
+            }
+            if (gu_unlikely(ret < 0))
+            { // error
                 gu_debug ("gcs_handle_actions returned %d: %s",
                           ret, strerror(-ret));
                 break;
@@ -2271,9 +2278,17 @@ gcs_vote (gcs_conn_t* const conn, const gu::GTID& gtid, uint64_t const code,
     if (gcs_proto_ver(conn) < 1)
     {
         assert(code != 0); // should be here only our own initiative
-        log_error << "Not all group members support inconsistency voting. "
-                  << "Reverting to old behavior: abort on error.";
+        log_info << "Not all group members support inconsistency voting. "
+                 << "Reverting to old behavior: abort on error.";
         return 1; /* no voting with old protocol */
+    }
+
+    if (conn->state >= GCS_CONN_JOINER)
+    {
+        assert(code != 0); // should be here only our own initiative
+        log_info << "Can't vote when not at least JOINED. "
+                 << "Assuming inconsistency. Full SST is required";
+        return 1; /* Error applying IST event */
     }
 
     int const err(gu_mutex_lock(&conn->vote_lock_));

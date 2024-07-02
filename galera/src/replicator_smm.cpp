@@ -2606,7 +2606,7 @@ static void validate_local_prim_view_info(const wsrep_view_info_t* view_info,
 bool galera::ReplicatorSMM::skip_prim_conf_change(
     const wsrep_view_info_t& view_info, int const proto_ver)
 {
-    auto cc_seqno(WSREP_SEQNO_UNDEFINED);
+    wsrep_seqno_t cc_seqno(WSREP_SEQNO_UNDEFINED);
     bool keep(false); // keep in cache
 
     if (proto_ver >= PROTO_VER_ORDERED_CC)
@@ -2618,7 +2618,7 @@ bool galera::ReplicatorSMM::skip_prim_conf_change(
             // was not part of IST preload, adjust cert. index
             // see handle_trx_overlapping_ist() for analogous logic
             assert(cc_seqno == cert_.position() + 1);
-            const auto trx_ver
+            const int trx_ver
                 (std::get<0>(get_trx_protocol_versions(proto_ver)));
             cert_.adjust_position(view_info,
                                   gu::GTID(view_info.state_id.uuid, cc_seqno),
