@@ -51,7 +51,15 @@ BuildRoot:     %{_tmppath}/%{name}-%{version}
 #BuildRequires: boost-devel
 #BuildRequires: check-devel
 BuildRequires: glibc-devel
+%if "%{dist}" == ".opensuse-leap15"
+BuildRequires: pkgconfig(libssl)
+%else
+%if "%{dist}" == ".sle15"
+BuildRequires: pkgconfig(libssl)
+%else
 BuildRequires: openssl-devel
+%endif
+%endif
 
 %if 0%{?suse_version} == 1110
 # On SLES11 SPx use the linked gcc47 to build instead of default gcc43
