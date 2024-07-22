@@ -60,7 +60,8 @@ fi
 # from /etc/os-release
 if  [ -z "$DIST_TAG" ]
 then
-  DIST_TAG=".${ID}${VERSION_ID%%.*}"
+  VERSION_ID=${VERSION_ID:-}
+  DIST_TAG=".${ID:-unknown}${VERSION_ID%%.*}"
 fi
 
 $(which rpmbuild) --clean --define "_topdir $RPM_TOP_DIR" \
