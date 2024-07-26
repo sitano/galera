@@ -133,6 +133,7 @@ gu_log (gu_log_severity_t severity,
         const char*       file,
         const char*       function,
         const int         line,
+        const char*       fmt,
         ...)
 {
     va_list ap;
@@ -165,10 +166,8 @@ gu_log (gu_log_severity_t severity,
         max_string -= len;
         va_start (ap, line);
         {
-            const char* format = va_arg (ap, const char*);
-
-            if (gu_likely(max_string > 0 && NULL != format)) {
-                vsnprintf (str, max_string, format, ap);
+            if (gu_likely(max_string > 0 && NULL != fmt)) {
+                vsnprintf (str, max_string, fmt, ap);
             }
         }
         va_end (ap);
