@@ -592,7 +592,8 @@ state_quorum_inherit (const gcs_state_msg_t* states[],
                 if (buf) {
                     state_report_uuids (buf, buf_len, states, states_num,
                                         GCS_NODE_STATE_DONOR);
-                    gu_fatal("Quorum impossible: conflicting group UUIDs:\n%s");
+                    gu_fatal("Quorum impossible: conflicting group UUIDs:\n%s",
+                             buf);
                     gu_free (buf);
                 }
                 else {

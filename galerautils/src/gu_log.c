@@ -164,7 +164,7 @@ gu_log (gu_log_severity_t severity,
 
         str += len;
         max_string -= len;
-        va_start (ap, line);
+        va_start (ap, fmt);
         {
             if (gu_likely(max_string > 0 && NULL != fmt)) {
                 vsnprintf (str, max_string, fmt, ap);

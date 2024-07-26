@@ -452,7 +452,7 @@ gt_group::sst_start (int const joiner_idx,const char* donor_name)
         int ret = gcs_group_handle_state_request(nodes[i]->group(), &req);
 
         if (ret < 0) { // don't fail here, we may want to test negatives
-            gu_error (ret < 0, "Handling state request to '%s' failed: %d (%s)",
+            gu_error ("Handling state request to '%s' failed: %d (%s)",
                       donor_name, ret, strerror (-ret));
             return ret;
         }

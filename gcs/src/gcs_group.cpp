@@ -15,6 +15,7 @@
 
 #include <errno.h>
 
+#include <cinttypes>
 #include <limits>
 
 std::string const GCS_VOTE_POLICY_KEY("gcs.vote_policy");
@@ -146,7 +147,7 @@ group_nodes_init (const gcs_group_t* group, const gcs_comp_msg_t* comp)
         }
     }
     else {
-        gu_error ("Could not allocate %ld x %z bytes", nodes_num,
+        gu_error ("Could not allocate %ld x %zu bytes", nodes_num,
                   sizeof(gcs_node_t));
     }
     return ret;
@@ -480,10 +481,10 @@ group_post_state_exchange (gcs_group_t* group)
     gu_info ("Quorum results:"
              "\n\tversion    = %u,"
              "\n\tcomponent  = %s,"
-             "\n\tconf_id    = %lld,"
-             "\n\tmembers    = %d/%d (joined/total),"
-             "\n\tact_id     = %lld,"
-             "\n\tlast_appl. = %lld,"
+             "\n\tconf_id    = %" PRId64 ","
+             "\n\tmembers    = %ld/%ld (joined/total),"
+             "\n\tact_id     = %" PRId64 ","
+             "\n\tlast_appl. = %" PRId64 ","
              "\n\tprotocols  = %d/%d/%d (gcs/repl/appl),"
              "\n\tvote policy= %d,"
              "\n\tgroup UUID = " GU_UUID_FORMAT,
@@ -543,7 +544,7 @@ gcs_group_handle_comp_msg (gcs_group_t* group, const gcs_comp_msg_t* comp)
         new_nodes = group_nodes_init (group, comp);
 
         if (!new_nodes) {
-            gu_fatal ("Could not allocate memory for %ld-node component.",
+            gu_fatal ("Could not allocate memory for %d-node component.",
                       gcs_comp_msg_num (comp));
             assert(0);
             return (gcs_group_state_t)-ENOMEM;
@@ -692,7 +693,7 @@ gcs_group_handle_uuid_msg  (gcs_group_t* group, const gcs_recv_msg_t* msg)
     }
     else {
         gu_warn ("Stray state UUID msg: " GU_UUID_FORMAT
-                 " from node %ld (%s), current group state %s",
+                 " from node %d (%s), current group state %s",
                  GU_UUID_ARGS((gu_uuid_t*)msg->buf),
                  msg->sender_idx, group->nodes[msg->sender_idx].name,
                  gcs_group_state_str[group->state]);
@@ -726,7 +727,7 @@ gcs_group_handle_state_msg (gcs_group_t* group, const gcs_recv_msg_t* msg)
             }
             else {
                 gu_debug ("STATE EXCHANGE: stray state msg: " GU_UUID_FORMAT
-                          " from node %ld (%s), current state UUID: "
+                          " from node %d (%s), current state UUID: "
                           GU_UUID_FORMAT,
                           GU_UUID_ARGS(state_uuid),
                           msg->sender_idx, gcs_state_msg_name(state),
@@ -737,7 +738,7 @@ gcs_group_handle_state_msg (gcs_group_t* group, const gcs_recv_msg_t* msg)
             }
         }
         else {
-            gu_warn ("Could not parse state message from node %d",
+            gu_warn ("Could not parse state message from node %d, %s",
                      msg->sender_idx, group->nodes[msg->sender_idx].name);
         }
     }
@@ -827,7 +828,7 @@ gcs_group_handle_last_msg (gcs_group_t* group, const gcs_recv_msg_t* msg)
         group_redo_last_applied (group);
 
         if (old_val < group->last_applied) {
-            gu_debug ("New COMMIT CUT %lld on %d after %lld from %d",
+            gu_debug ("New COMMIT CUT %lld on %ld after %lld from %d",
                       (long long)group->last_applied, group->my_idx,
                       (long long)gtid.seqno(), msg->sender_idx);
             return group->last_applied;
@@ -1758,7 +1759,7 @@ void
 gcs_group_ignore_action (gcs_group_t* group, struct gcs_act_rcvd* act)
 {
     gu_debug("Ignoring action: buf: %p, len: %zd, type: %d, sender: %d, "
-             "seqno: %lld", act->act.buf, act->act.buf_len, act->act.type,
+             "seqno: %" PRId64, act->act.buf, act->act.buf_len, act->act.type,
              act->sender_idx, act->id);
 
     if (act->act.type <= GCS_ACT_CCHANGE) {
