@@ -23,6 +23,7 @@ include_directories(
   ${PROJECT_SOURCE_DIR}/gcs/src
   ${PROJECT_SOURCE_DIR}/wsrep/src
   ${PROJECT_SOURCE_DIR}/wsrep/ps
+  ${PROJECT_SOURCE_DIR}/wsrep-api-v26
   )
 
 # Options to control compiler options and error behavior.
