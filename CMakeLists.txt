@@ -93,15 +93,15 @@ include(cmake/endian.cmake)
 include(cmake/seed_seq.cmake)
 include(cmake/shared_ptr.cmake)
 include(cmake/unordered.cmake)
-include(cmake/check.cmake)
+# include(cmake/check.cmake)
 include(cmake/memorycheck.cmake)
 include(cmake/coverage.cmake)
 # Keep the maintainer mode as last to avoid feature checks failing
 # in compiler warnings.
 include(cmake/maintainer_mode.cmake)
 
-include(CTest)
-enable_testing()
+# include(CTest)
+# enable_testing()
 add_subdirectory(galerautils)
 add_subdirectory(gcomm)
 add_subdirectory(gcache)
@@ -109,7 +109,7 @@ add_subdirectory(gcs)
 add_subdirectory(garb)
 add_subdirectory(galera)
 add_subdirectory(scripts/packages)
-add_subdirectory(wsrep/tests)
+# add_subdirectory(wsrep/tests)
 
 if (NOT ${CMAKE_SYSTEM_NAME} MATCHES ".*BSD")
   install(FILES

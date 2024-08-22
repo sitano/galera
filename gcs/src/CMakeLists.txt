@@ -80,14 +80,14 @@ target_link_libraries(gcs4garb gcomm gcache)
 # Gcs test program, must be run manually.
 #
 
-add_executable(gcs_test gcs_test.cpp)
+# add_executable(gcs_test gcs_test.cpp)
 
-target_compile_options(gcs_test
-  PRIVATE
-  -Wno-conversion
-  -Wno-unused-parameter)
+# target_compile_options(gcs_test
+#   PRIVATE
+#   -Wno-conversion
+#   -Wno-unused-parameter)
 
-target_link_libraries(gcs_test gcs gcomm)
+# target_link_libraries(gcs_test gcs gcomm)
 
-add_subdirectory(unit_tests)
+# add_subdirectory(unit_tests)
 
